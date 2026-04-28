@@ -1,14 +1,5 @@
-; =============================================================================
-; LSTamagotchi - Fase 2
-; PIC18F4321 @ 32 MHz (8 MHz interno + PLL x4)
-; =============================================================================
-
-    LIST P=18F4321
-    #include <p18f4321.inc>
-
-; =============================================================================
-; BITS DE CONFIGURACION
-; =============================================================================
+LIST P=PIC18F4321 F=INHX32
+#include <p18f4321.inc>
 
 ; Oscilador interno, RA6/RA7 como I/O
     CONFIG OSC = INTIO2
@@ -23,297 +14,260 @@
 ; Low Voltage Programming desactivado
     CONFIG LVP = OFF
 
-; =============================================================================
-; CONSTANTES
-; =============================================================================
+ORG 0x0000
+GOTO MAIN
 
-NUM_PIXELS  EQU D'64'
-WS_PIN      EQU 4               ; RA4
+ORG 0x0008
+RETFIE FAST
 
-; Brillo reducido para tests (0xFF = max, 0x20 = suave)
-BRIGHT      EQU 0x20
+ORG 0x0018
+RETFIE FAST
 
-; =============================================================================
-; VARIABLES EN RAM (Access Bank)
-; =============================================================================
+;-------------------------------------------------------------------------------
+;                              Variables
+;-------------------------------------------------------------------------------
 
-    UDATA_ACS
+; Contadores para delays
+Delay_Cnt1          EQU 0x001
+Delay_Cnt2          EQU 0x002
+Delay_Cnt3          EQU 0x003
 
-delay_cnt1  RES 1
-delay_cnt2  RES 1
-delay_cnt3  RES 1
+; WS2812B
+WS_Dato             EQU 0x004       ; byte que se esta enviando
+WS_Cont_Bits        EQU 0x005       ; contador de bits (8)
+WS_Cont_Pixels      EQU 0x006       ; contador de pixeles
+WS_Temp             EQU 0x007       ; variable temporal
 
-ws_data     RES 1               ; byte que se esta enviando
-ws_bit_cnt  RES 1               ; contador de bits (8)
-ws_pix_cnt  RES 1               ; contador de pixeles
-ws_temp     RES 1               ; variable temporal
+; Constantes
+NUM_PIXELS          EQU D'64'       ; 8x8 = 64 LEDs
+BRILLO              EQU 0x20        ; brillo reducido para tests
 
-; =============================================================================
-; VECTOR DE RESET
-; =============================================================================
+;-------------------------------------------------------------------------------
+;                        Configuracion inicial
+;-------------------------------------------------------------------------------
 
-    ORG 0x0000
-    GOTO    init
+Init_Oscilador
+    ; Oscilador interno a 8 MHz
+    MOVLW b'01110000'
+    MOVWF OSCCON,0
 
-; =============================================================================
-; VECTOR DE INTERRUPCION ALTA PRIORIDAD
-; =============================================================================
+    ; Activar PLL x4 (8 MHz x 4 = 32 MHz)
+    BSF OSCTUNE,6,0
 
-    ORG 0x0008
-    RETFIE
+    ; Esperar a que el oscilador sea estable
+Espera_Estable
+    BTFSS OSCCON,2,0
+    GOTO Espera_Estable
+RETURN
 
-; =============================================================================
-; VECTOR DE INTERRUPCION BAJA PRIORIDAD
-; =============================================================================
+Init_Puertos
+    ; Todos los pines como digitales (desactivar ADC)
+    MOVLW 0x0F
+    MOVWF ADCON1,0
 
-    ORG 0x0018
-    RETFIE
+    ; Desactivar comparadores
+    MOVLW 0x07
+    MOVWF CMCON,0
 
-; =============================================================================
-; INICIALIZACION
-; =============================================================================
+    ; RA4 como salida (WS2812B data)
+    BCF TRISA,4,0
+    BCF LATA,4,0
+RETURN
 
-    ORG 0x0020
+;-------------------------------------------------------------------------------
+;                           Driver WS2812B
+;-------------------------------------------------------------------------------
 
-init:
-    ; --- Configurar oscilador a 8 MHz interno ---
-    MOVLW   B'01110000'
-    MOVWF   OSCCON
-
-    ; --- Activar PLL x4 (8 MHz x 4 = 32 MHz) ---
-    BSF     OSCTUNE, PLLEN
-
-    ; --- Esperar a que el oscilador sea estable ---
-    BTFSS   OSCCON, IOFS
-    BRA     $-2
-
-    ; --- Todos los pines como digitales ---
-    MOVLW   0x0F
-    MOVWF   ADCON1
-
-    ; --- Desactivar comparadores ---
-    MOVLW   0x07
-    MOVWF   CMCON
-
-    ; --- RA4 como salida (WS2812B data) ---
-    BCF     TRISA, WS_PIN
-    BCF     LATA, WS_PIN
-
-    ; --- Reset inicial de la tira LED ---
-    CALL    ws_reset
-
-; =============================================================================
-; MAIN LOOP - Tests WS2812B
-;
-; Test 1: Todos los LEDs en rojo
-; Test 2: Solo el primer LED en verde
-; Test 3: Fila 0 verde + pixel 8 rojo (determinar orden lineal/serpentina)
-; =============================================================================
-
-main_loop:
-    ; --- Test 1: Todos rojo ---
-    CALL    ws_test_all_red
-    CALL    delay_500ms
-    CALL    delay_500ms
-    CALL    delay_500ms
-    CALL    delay_500ms
-
-    ; --- Test 2: Solo pixel 0 verde ---
-    CALL    ws_test_first_green
-    CALL    delay_500ms
-    CALL    delay_500ms
-    CALL    delay_500ms
-    CALL    delay_500ms
-
-    ; --- Test 3: Fila 0 verde + pixel 8 rojo ---
-    CALL    ws_test_order
-    CALL    delay_500ms
-    CALL    delay_500ms
-    CALL    delay_500ms
-    CALL    delay_500ms
-
-    BRA     main_loop
-
-; =============================================================================
-; WS2812B DRIVER
-; =============================================================================
-
-; -----------------------------------------------------------------------------
-; ws_send_byte - Envia un byte por RA4 (MSB primero)
-; Entrada: WREG = byte a enviar
+; Envia un byte por RA4 (MSB primero)
+; Entrada: W = byte a enviar
 ;
 ; Timing por bit a 32 MHz (Tcy = 125ns):
 ;   Bit 0: T0H = 3 ciclos (375ns), T0L = 8 ciclos (1000ns)
 ;   Bit 1: T1H = 6 ciclos (750ns), T1L = 5 ciclos (625ns)
-; Total por bit: 11 ciclos (1375ns)
-; -----------------------------------------------------------------------------
+WS_Envia_Byte
+    MOVWF WS_Dato,0
+    MOVLW D'8'
+    MOVWF WS_Cont_Bits,0
 
-ws_send_byte:
-    MOVWF   ws_data
-    MOVLW   D'8'
-    MOVWF   ws_bit_cnt
-
-ws_bit_loop:
-    BSF     LATA, WS_PIN       ; HIGH
+WS_Bucle_Bit
+    BSF LATA,4,0                    ; HIGH
     NOP
-    BTFSS   ws_data, 7         ; test MSB
-    BCF     LATA, WS_PIN       ; LOW si bit=0 (T0H = 3 ciclos)
+    BTFSS WS_Dato,7,0              ; testar MSB
+    BCF LATA,4,0                    ; LOW si bit=0 (T0H = 3 ciclos)
     NOP
     NOP
-    BCF     LATA, WS_PIN       ; LOW siempre (T1H = 6 ciclos)
-    RLNCF   ws_data, F         ; rotar para siguiente bit
-    DECFSZ  ws_bit_cnt, F
-    BRA     ws_bit_loop
-    RETURN
+    BCF LATA,4,0                    ; LOW siempre (T1H = 6 ciclos)
+    RLNCF WS_Dato,1,0              ; rotar para siguiente bit
+    DECFSZ WS_Cont_Bits,1,0
+    BRA WS_Bucle_Bit
+RETURN
 
-; -----------------------------------------------------------------------------
-; ws_reset - Senal de reset (>50us LOW en RA4)
+; Senal de reset (>50us LOW en RA4)
 ; 134 x 3 ciclos x 125ns = ~50us
-; -----------------------------------------------------------------------------
+WS_Reset
+    BCF LATA,4,0
+    MOVLW D'134'
+    MOVWF WS_Temp,0
+WS_Reset_Bucle
+    DECFSZ WS_Temp,1,0
+    BRA WS_Reset_Bucle
+RETURN
 
-ws_reset:
-    BCF     LATA, WS_PIN
-    MOVLW   D'134'
-    MOVWF   ws_temp
-ws_reset_loop:
-    DECFSZ  ws_temp, F
-    BRA     ws_reset_loop
-    RETURN
+;-------------------------------------------------------------------------------
+;                          Tests WS2812B
+;-------------------------------------------------------------------------------
 
-; =============================================================================
-; TEST 1: Todos los LEDs en rojo
-; Envia 64 pixeles: G=0, R=BRIGHT, B=0
-; =============================================================================
+; Test 1: Todos los LEDs en rojo (G=0, R=BRILLO, B=0)
+WS_Test_Todo_Rojo
+    BCF INTCON,GIE,0
+    MOVLW NUM_PIXELS
+    MOVWF WS_Cont_Pixels,0
 
-ws_test_all_red:
-    BCF     INTCON, GIE
-    MOVLW   NUM_PIXELS
-    MOVWF   ws_pix_cnt
+WS_TR_Bucle
+    MOVLW 0x00
+    CALL WS_Envia_Byte              ; G = 0
+    MOVLW BRILLO
+    CALL WS_Envia_Byte              ; R = BRILLO
+    MOVLW 0x00
+    CALL WS_Envia_Byte              ; B = 0
+    DECFSZ WS_Cont_Pixels,1,0
+    BRA WS_TR_Bucle
 
-ws_tar_loop:
-    MOVLW   0x00
-    CALL    ws_send_byte        ; G = 0
-    MOVLW   BRIGHT
-    CALL    ws_send_byte        ; R = BRIGHT
-    MOVLW   0x00
-    CALL    ws_send_byte        ; B = 0
-    DECFSZ  ws_pix_cnt, F
-    BRA     ws_tar_loop
+    CALL WS_Reset
+    BSF INTCON,GIE,0
+RETURN
 
-    CALL    ws_reset
-    BSF     INTCON, GIE
-    RETURN
-
-; =============================================================================
-; TEST 2: Solo el primer LED en verde, resto apagado
-; Pixel 0: G=BRIGHT, R=0, B=0
-; Pixeles 1-63: apagados
-; =============================================================================
-
-ws_test_first_green:
-    BCF     INTCON, GIE
+; Test 2: Solo pixel 0 en verde, resto apagado
+WS_Test_Primer_Verde
+    BCF INTCON,GIE,0
 
     ; Pixel 0: verde
-    MOVLW   BRIGHT
-    CALL    ws_send_byte        ; G = BRIGHT
-    MOVLW   0x00
-    CALL    ws_send_byte        ; R = 0
-    MOVLW   0x00
-    CALL    ws_send_byte        ; B = 0
+    MOVLW BRILLO
+    CALL WS_Envia_Byte              ; G = BRILLO
+    MOVLW 0x00
+    CALL WS_Envia_Byte              ; R = 0
+    MOVLW 0x00
+    CALL WS_Envia_Byte              ; B = 0
 
     ; Pixeles 1-63: apagados
-    MOVLW   NUM_PIXELS - 1
-    MOVWF   ws_pix_cnt
+    MOVLW NUM_PIXELS - 1
+    MOVWF WS_Cont_Pixels,0
 
-ws_tfg_loop:
-    MOVLW   0x00
-    CALL    ws_send_byte
-    MOVLW   0x00
-    CALL    ws_send_byte
-    MOVLW   0x00
-    CALL    ws_send_byte
-    DECFSZ  ws_pix_cnt, F
-    BRA     ws_tfg_loop
+WS_PV_Bucle
+    MOVLW 0x00
+    CALL WS_Envia_Byte
+    MOVLW 0x00
+    CALL WS_Envia_Byte
+    MOVLW 0x00
+    CALL WS_Envia_Byte
+    DECFSZ WS_Cont_Pixels,1,0
+    BRA WS_PV_Bucle
 
-    CALL    ws_reset
-    BSF     INTCON, GIE
-    RETURN
+    CALL WS_Reset
+    BSF INTCON,GIE,0
+RETURN
 
-; =============================================================================
-; TEST 3: Determinar orden lineal vs serpentina
-; Pixeles 0-7 (fila 0): verde
-; Pixel 8: rojo
-; Pixeles 9-63: apagados
-;
-; Si lineal:     el LED rojo esta al inicio de la fila 2 (izquierda)
-; Si serpentina: el LED rojo esta al final de la fila 2 (derecha)
-; =============================================================================
+; Test 3: Fila 0 verde + pixel 8 rojo (verificar orden lineal)
+; Resultado confirmado: orden LINEAL (todas las filas izquierda a derecha)
+WS_Test_Orden
+    BCF INTCON,GIE,0
 
-ws_test_order:
-    BCF     INTCON, GIE
+    ; Pixeles 0-7: verde (fila 0)
+    MOVLW D'8'
+    MOVWF WS_Cont_Pixels,0
 
-    ; Pixeles 0-7: verde
-    MOVLW   D'8'
-    MOVWF   ws_pix_cnt
+WS_TO_Verde
+    MOVLW BRILLO
+    CALL WS_Envia_Byte              ; G
+    MOVLW 0x00
+    CALL WS_Envia_Byte              ; R
+    MOVLW 0x00
+    CALL WS_Envia_Byte              ; B
+    DECFSZ WS_Cont_Pixels,1,0
+    BRA WS_TO_Verde
 
-ws_to_green:
-    MOVLW   BRIGHT
-    CALL    ws_send_byte        ; G
-    MOVLW   0x00
-    CALL    ws_send_byte        ; R
-    MOVLW   0x00
-    CALL    ws_send_byte        ; B
-    DECFSZ  ws_pix_cnt, F
-    BRA     ws_to_green
-
-    ; Pixel 8: rojo
-    MOVLW   0x00
-    CALL    ws_send_byte        ; G
-    MOVLW   BRIGHT
-    CALL    ws_send_byte        ; R
-    MOVLW   0x00
-    CALL    ws_send_byte        ; B
+    ; Pixel 8: rojo (inicio fila 1)
+    MOVLW 0x00
+    CALL WS_Envia_Byte              ; G
+    MOVLW BRILLO
+    CALL WS_Envia_Byte              ; R
+    MOVLW 0x00
+    CALL WS_Envia_Byte              ; B
 
     ; Pixeles 9-63: apagados
-    MOVLW   D'55'
-    MOVWF   ws_pix_cnt
+    MOVLW D'55'
+    MOVWF WS_Cont_Pixels,0
 
-ws_to_off:
-    MOVLW   0x00
-    CALL    ws_send_byte
-    MOVLW   0x00
-    CALL    ws_send_byte
-    MOVLW   0x00
-    CALL    ws_send_byte
-    DECFSZ  ws_pix_cnt, F
-    BRA     ws_to_off
+WS_TO_Apagado
+    MOVLW 0x00
+    CALL WS_Envia_Byte
+    MOVLW 0x00
+    CALL WS_Envia_Byte
+    MOVLW 0x00
+    CALL WS_Envia_Byte
+    DECFSZ WS_Cont_Pixels,1,0
+    BRA WS_TO_Apagado
 
-    CALL    ws_reset
-    BSF     INTCON, GIE
-    RETURN
+    CALL WS_Reset
+    BSF INTCON,GIE,0
+RETURN
 
-; =============================================================================
-; RUTINA DE DELAY ~500 ms
-; =============================================================================
+;-------------------------------------------------------------------------------
+;                           Delays
+;-------------------------------------------------------------------------------
 
-delay_500ms:
-    MOVLW   D'21'
-    MOVWF   delay_cnt3
-loop3:
-    MOVLW   D'100'
-    MOVWF   delay_cnt2
-loop2:
-    MOVLW   D'190'
-    MOVWF   delay_cnt1
-loop1:
-    DECFSZ  delay_cnt1, F
-    BRA     loop1
-    DECFSZ  delay_cnt2, F
-    BRA     loop2
-    DECFSZ  delay_cnt3, F
-    BRA     loop3
-    RETURN
+; Delay de ~500ms a 32 MHz
+; 21 x 100 x 190 x 3 ciclos x 125ns ~= 500ms
+Delay_500ms
+    MOVLW D'21'
+    MOVWF Delay_Cnt3,0
+Bucle_D3
+    MOVLW D'100'
+    MOVWF Delay_Cnt2,0
+Bucle_D2
+    MOVLW D'190'
+    MOVWF Delay_Cnt1,0
+Bucle_D1
+    DECFSZ Delay_Cnt1,1,0
+    BRA Bucle_D1
+    DECFSZ Delay_Cnt2,1,0
+    BRA Bucle_D2
+    DECFSZ Delay_Cnt3,1,0
+    BRA Bucle_D3
+RETURN
 
-; =============================================================================
+;-------------------------------------------------------------------------------
+;                              MAIN
+;-------------------------------------------------------------------------------
 
-    END
+MAIN
+    CALL Init_Oscilador
+    CALL Init_Puertos
+    CALL WS_Reset
+
+; Bucle principal: ciclar entre los 3 tests con pausa de 2s
+Bucle_Principal
+    ; Test 1: Todos rojo
+    CALL WS_Test_Todo_Rojo
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+
+    ; Test 2: Solo pixel 0 verde
+    CALL WS_Test_Primer_Verde
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+
+    ; Test 3: Fila 0 verde + pixel 8 rojo
+    CALL WS_Test_Orden
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+
+    GOTO Bucle_Principal
+
+END
