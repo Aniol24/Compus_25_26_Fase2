@@ -10,68 +10,12 @@
 ; BITS DE CONFIGURACION
 ; =============================================================================
 
-; Oscilador interno, RA6/RA7 como I/O digital
-    CONFIG OSC = INTIO2
-
-; Fail-Safe Clock Monitor y switchover desactivados
-    CONFIG FCMEN = OFF
-    CONFIG IESO = OFF
-
-; Power-up Timer activado
-    CONFIG PWRT = ON
-
-; Brown-out Reset desactivado
-    CONFIG BOR = OFF
-    CONFIG BORV = 3
-
-; Watchdog Timer desactivado
-    CONFIG WDT = OFF
-    CONFIG WDTPS = 32768
-
-; MCLR activado (RE3 = pin de reset = PCI)
-    CONFIG MCLRE = ON
-
-; Timer1 low power desactivado
-    CONFIG LPT1OSC = OFF
-
-; PORTB<4:0> como digital I/O (no analogico)
-    CONFIG PBADEN = OFF
-
-; CCP2 en RC1
-    CONFIG CCP2MX = PORTC
-
-; Stack overflow reset activado
-    CONFIG STVREN = ON
-
-; Low Voltage Programming desactivado
-    CONFIG LVP = OFF
-
-; Debug desactivado
-    CONFIG DEBUG = OFF
-
-; Proteccion de codigo desactivada
-    CONFIG CP0 = OFF
-    CONFIG CP1 = OFF
-    CONFIG CP2 = OFF
-    CONFIG CP3 = OFF
-    CONFIG CPB = OFF
-    CONFIG CPD = OFF
-
-; Proteccion de escritura desactivada
-    CONFIG WRT0 = OFF
-    CONFIG WRT1 = OFF
-    CONFIG WRT2 = OFF
-    CONFIG WRT3 = OFF
-    CONFIG WRTB = OFF
-    CONFIG WRTC = OFF
-    CONFIG WRTD = OFF
-
-; Proteccion de lectura de tabla desactivada
-    CONFIG EBTR0 = OFF
-    CONFIG EBTR1 = OFF
-    CONFIG EBTR2 = OFF
-    CONFIG EBTR3 = OFF
-    CONFIG EBTRB = OFF
+    CONFIG OSC = INTIO2             ; Oscilador interno, RA6/RA7 como I/O
+    CONFIG PWRT = ON                ; Power-up Timer activado
+    CONFIG WDT = OFF                ; Watchdog desactivado
+    CONFIG MCLRE = ON               ; RE3 = reset (PCI)
+    CONFIG PBADEN = OFF             ; PORTB como digital I/O
+    CONFIG LVP = OFF                ; Low Voltage Programming desactivado
 
 ; =============================================================================
 ; VARIABLES EN RAM
