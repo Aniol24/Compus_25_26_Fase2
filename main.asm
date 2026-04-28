@@ -24,7 +24,17 @@
     CONFIG LVP = OFF
 
 ; =============================================================================
-; VARIABLES EN RAM
+; CONSTANTES
+; =============================================================================
+
+NUM_PIXELS  EQU D'64'
+WS_PIN      EQU 4               ; RA4
+
+; Brillo reducido para tests (0xFF = max, 0x20 = suave)
+BRIGHT      EQU 0x20
+
+; =============================================================================
+; VARIABLES EN RAM (Access Bank)
 ; =============================================================================
 
     UDATA_ACS
@@ -32,6 +42,11 @@
 delay_cnt1  RES 1
 delay_cnt2  RES 1
 delay_cnt3  RES 1
+
+ws_data     RES 1               ; byte que se esta enviando
+ws_bit_cnt  RES 1               ; contador de bits (8)
+ws_pix_cnt  RES 1               ; contador de pixeles
+ws_temp     RES 1               ; variable temporal
 
 ; =============================================================================
 ; VECTOR DE RESET
@@ -62,7 +77,7 @@ delay_cnt3  RES 1
 
 init:
     ; --- Configurar oscilador a 8 MHz interno ---
-    MOVLW   B'01110000'         ; IRCF<2:0> = 111 = 8 MHz, SCS<1:0> = 00
+    MOVLW   B'01110000'
     MOVWF   OSCCON
 
     ; --- Activar PLL x4 (8 MHz x 4 = 32 MHz) ---
@@ -72,7 +87,7 @@ init:
     BTFSS   OSCCON, IOFS
     BRA     $-2
 
-    ; --- Todos los pines como digitales (desactivar ADC) ---
+    ; --- Todos los pines como digitales ---
     MOVLW   0x0F
     MOVWF   ADCON1
 
@@ -80,27 +95,205 @@ init:
     MOVLW   0x07
     MOVWF   CMCON
 
-    ; --- Configurar puertos ---
-    ; Por ahora: RA4 como salida (test LED blink)
-    ; El resto se configurara en tareas posteriores
-    BCF     TRISA, 4            ; RA4 = salida
-    BCF     LATA, 4             ; RA4 = LOW inicial
+    ; --- RA4 como salida (WS2812B data) ---
+    BCF     TRISA, WS_PIN
+    BCF     LATA, WS_PIN
 
-    ; --- Test: parpadear RA4 a ~1 Hz ---
+    ; --- Reset inicial de la tira LED ---
+    CALL    ws_reset
+
+; =============================================================================
+; MAIN LOOP - Tests WS2812B
+;
+; Test 1: Todos los LEDs en rojo
+; Test 2: Solo el primer LED en verde
+; Test 3: Fila 0 verde + pixel 8 rojo (determinar orden lineal/serpentina)
+; =============================================================================
 
 main_loop:
-    BSF     LATA, 4             ; RA4 = HIGH (LED encendido)
+    ; --- Test 1: Todos rojo ---
+    CALL    ws_test_all_red
     CALL    delay_500ms
-    BCF     LATA, 4             ; RA4 = LOW (LED apagado)
     CALL    delay_500ms
+    CALL    delay_500ms
+    CALL    delay_500ms
+
+    ; --- Test 2: Solo pixel 0 verde ---
+    CALL    ws_test_first_green
+    CALL    delay_500ms
+    CALL    delay_500ms
+    CALL    delay_500ms
+    CALL    delay_500ms
+
+    ; --- Test 3: Fila 0 verde + pixel 8 rojo ---
+    CALL    ws_test_order
+    CALL    delay_500ms
+    CALL    delay_500ms
+    CALL    delay_500ms
+    CALL    delay_500ms
+
     BRA     main_loop
 
 ; =============================================================================
+; WS2812B DRIVER
+; =============================================================================
+
+; -----------------------------------------------------------------------------
+; ws_send_byte - Envia un byte por RA4 (MSB primero)
+; Entrada: WREG = byte a enviar
+;
+; Timing por bit a 32 MHz (Tcy = 125ns):
+;   Bit 0: T0H = 3 ciclos (375ns), T0L = 8 ciclos (1000ns)
+;   Bit 1: T1H = 6 ciclos (750ns), T1L = 5 ciclos (625ns)
+; Total por bit: 11 ciclos (1375ns)
+; -----------------------------------------------------------------------------
+
+ws_send_byte:
+    MOVWF   ws_data
+    MOVLW   D'8'
+    MOVWF   ws_bit_cnt
+
+ws_bit_loop:
+    BSF     LATA, WS_PIN       ; HIGH
+    NOP
+    BTFSS   ws_data, 7         ; test MSB
+    BCF     LATA, WS_PIN       ; LOW si bit=0 (T0H = 3 ciclos)
+    NOP
+    NOP
+    BCF     LATA, WS_PIN       ; LOW siempre (T1H = 6 ciclos)
+    RLNCF   ws_data, F         ; rotar para siguiente bit
+    DECFSZ  ws_bit_cnt, F
+    BRA     ws_bit_loop
+    RETURN
+
+; -----------------------------------------------------------------------------
+; ws_reset - Senal de reset (>50us LOW en RA4)
+; 134 x 3 ciclos x 125ns = ~50us
+; -----------------------------------------------------------------------------
+
+ws_reset:
+    BCF     LATA, WS_PIN
+    MOVLW   D'134'
+    MOVWF   ws_temp
+ws_reset_loop:
+    DECFSZ  ws_temp, F
+    BRA     ws_reset_loop
+    RETURN
+
+; =============================================================================
+; TEST 1: Todos los LEDs en rojo
+; Envia 64 pixeles: G=0, R=BRIGHT, B=0
+; =============================================================================
+
+ws_test_all_red:
+    BCF     INTCON, GIE
+    MOVLW   NUM_PIXELS
+    MOVWF   ws_pix_cnt
+
+ws_tar_loop:
+    MOVLW   0x00
+    CALL    ws_send_byte        ; G = 0
+    MOVLW   BRIGHT
+    CALL    ws_send_byte        ; R = BRIGHT
+    MOVLW   0x00
+    CALL    ws_send_byte        ; B = 0
+    DECFSZ  ws_pix_cnt, F
+    BRA     ws_tar_loop
+
+    CALL    ws_reset
+    BSF     INTCON, GIE
+    RETURN
+
+; =============================================================================
+; TEST 2: Solo el primer LED en verde, resto apagado
+; Pixel 0: G=BRIGHT, R=0, B=0
+; Pixeles 1-63: apagados
+; =============================================================================
+
+ws_test_first_green:
+    BCF     INTCON, GIE
+
+    ; Pixel 0: verde
+    MOVLW   BRIGHT
+    CALL    ws_send_byte        ; G = BRIGHT
+    MOVLW   0x00
+    CALL    ws_send_byte        ; R = 0
+    MOVLW   0x00
+    CALL    ws_send_byte        ; B = 0
+
+    ; Pixeles 1-63: apagados
+    MOVLW   NUM_PIXELS - 1
+    MOVWF   ws_pix_cnt
+
+ws_tfg_loop:
+    MOVLW   0x00
+    CALL    ws_send_byte
+    MOVLW   0x00
+    CALL    ws_send_byte
+    MOVLW   0x00
+    CALL    ws_send_byte
+    DECFSZ  ws_pix_cnt, F
+    BRA     ws_tfg_loop
+
+    CALL    ws_reset
+    BSF     INTCON, GIE
+    RETURN
+
+; =============================================================================
+; TEST 3: Determinar orden lineal vs serpentina
+; Pixeles 0-7 (fila 0): verde
+; Pixel 8: rojo
+; Pixeles 9-63: apagados
+;
+; Si lineal:     el LED rojo esta al inicio de la fila 2 (izquierda)
+; Si serpentina: el LED rojo esta al final de la fila 2 (derecha)
+; =============================================================================
+
+ws_test_order:
+    BCF     INTCON, GIE
+
+    ; Pixeles 0-7: verde
+    MOVLW   D'8'
+    MOVWF   ws_pix_cnt
+
+ws_to_green:
+    MOVLW   BRIGHT
+    CALL    ws_send_byte        ; G
+    MOVLW   0x00
+    CALL    ws_send_byte        ; R
+    MOVLW   0x00
+    CALL    ws_send_byte        ; B
+    DECFSZ  ws_pix_cnt, F
+    BRA     ws_to_green
+
+    ; Pixel 8: rojo
+    MOVLW   0x00
+    CALL    ws_send_byte        ; G
+    MOVLW   BRIGHT
+    CALL    ws_send_byte        ; R
+    MOVLW   0x00
+    CALL    ws_send_byte        ; B
+
+    ; Pixeles 9-63: apagados
+    MOVLW   D'55'
+    MOVWF   ws_pix_cnt
+
+ws_to_off:
+    MOVLW   0x00
+    CALL    ws_send_byte
+    MOVLW   0x00
+    CALL    ws_send_byte
+    MOVLW   0x00
+    CALL    ws_send_byte
+    DECFSZ  ws_pix_cnt, F
+    BRA     ws_to_off
+
+    CALL    ws_reset
+    BSF     INTCON, GIE
+    RETURN
+
+; =============================================================================
 ; RUTINA DE DELAY ~500 ms
-; A 32 MHz: Fosc/4 = 8 MHz, Tcy = 125 ns
-; Triple bucle anidado:
-;   cnt3 x cnt2 x cnt1 x 3 ciclos = ~500 ms
-;   21 x 100 x 190 x 3 x 125ns ~= 500 ms (aprox, ajustar si necesario)
 ; =============================================================================
 
 delay_500ms:
@@ -113,8 +306,8 @@ loop2:
     MOVLW   D'190'
     MOVWF   delay_cnt1
 loop1:
-    DECFSZ  delay_cnt1, F       ; 1 ciclo (o 2 si skip)
-    BRA     loop1               ; 2 ciclos
+    DECFSZ  delay_cnt1, F
+    BRA     loop1
     DECFSZ  delay_cnt2, F
     BRA     loop2
     DECFSZ  delay_cnt3, F
