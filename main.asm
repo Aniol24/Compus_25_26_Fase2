@@ -19,7 +19,7 @@
 ; RE3 = reset (PCI)
     CONFIG MCLRE = ON
 ; PORTB como digital I/O
-    CONFIG PBADEN = OFF
+    CONFIG PBADEN = DIG
 ; Low Voltage Programming desactivado
     CONFIG LVP = OFF
 
