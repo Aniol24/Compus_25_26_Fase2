@@ -10,12 +10,18 @@
 ; BITS DE CONFIGURACION
 ; =============================================================================
 
-    CONFIG OSC = INTIO2             ; Oscilador interno, RA6/RA7 como I/O
-    CONFIG PWRT = ON                ; Power-up Timer activado
-    CONFIG WDT = OFF                ; Watchdog desactivado
-    CONFIG MCLRE = ON               ; RE3 = reset (PCI)
-    CONFIG PBADEN = OFF             ; PORTB como digital I/O
-    CONFIG LVP = OFF                ; Low Voltage Programming desactivado
+; Oscilador interno, RA6/RA7 como I/O
+    CONFIG OSC = INTIO2
+; Power-up Timer activado
+    CONFIG PWRT = ON
+; Watchdog desactivado
+    CONFIG WDT = OFF
+; RE3 = reset (PCI)
+    CONFIG MCLRE = ON
+; PORTB como digital I/O
+    CONFIG PBADEN = OFF
+; Low Voltage Programming desactivado
+    CONFIG LVP = OFF
 
 ; =============================================================================
 ; VARIABLES EN RAM
