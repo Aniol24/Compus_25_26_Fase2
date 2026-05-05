@@ -45,9 +45,31 @@ Menu_State          EQU 0x008       ; 0=Jugar, 1=Alimentar, 2=Reset
 Part_Low_Rebots     EQU 0x009
 Part_High_Rebots    EQU 0x00A
 
+; Caras Tamagotchi - dibujo en matriz
+WS_Color_G          EQU 0x00B       ; componente verde del color de la cara
+WS_Color_R          EQU 0x00C       ; componente rojo del color de la cara
+WS_Color_B          EQU 0x00D       ; componente azul del color de la cara
+WS_Fila             EQU 0x00E       ; byte de la fila actual del sprite
+WS_Cont_Fila        EQU 0x00F       ; contador de filas (8)
+WS_Cont_Bit_Pixel   EQU 0x010       ; contador de bits dentro de una fila (8)
+
 ; Constantes
 NUM_PIXELS          EQU D'64'       ; 8x8 = 64 LEDs
 BRILLO              EQU 0x20        ; brillo reducido para tests
+
+;-------------------------------------------------------------------------------
+;                        Tablas de sprites en flash
+;-------------------------------------------------------------------------------
+
+; Cada tabla tiene 8 bytes, un byte por fila (MSB = pixel izquierdo)
+FACE_CHILD
+    DB 0x00, 0x00, 0x18, 0x24, 0x24, 0x18, 0x00, 0x00
+
+FACE_TEEN
+    DB 0x00, 0x3C, 0x42, 0x5A, 0x42, 0x42, 0x3C, 0x00
+
+FACE_ADULT
+    DB 0x7E, 0x81, 0xA5, 0x81, 0xA5, 0x99, 0x81, 0x7E
 
 ;-------------------------------------------------------------------------------
 ;                        Configuracion inicial
@@ -148,12 +170,12 @@ ALE_Blanc
     CALL Posa_LED_Blanc
 RETURN
 
-; Inicializar menu: estado 0 (Jugar), LEDs debug apagados, RGB cyan
+; Inicializar menu: estado 0 (Jugar), LED debug apagado, RGB cyan, cara child
 Init_Menu
     CLRF Menu_State,0
     BCF LATA,3,0
-    BCF LATA,4,0
     CALL Actualitza_LED_Menu
+    CALL Dibuixa_Cara_Menu
 RETURN
 
 ;-------------------------------------------------------------------------------
@@ -164,14 +186,13 @@ Bucle_Menu
     ; Comprobar RB1 (LeftOption)
     BTFSC PORTB,1,0
     GOTO Comprova_Right
+    BSF LATA,3,0
     CALL Espera_Rebots
 Deixa_Boto_Left
     BTFSS PORTB,1,0
     GOTO Deixa_Boto_Left
-    CALL Espera_Rebots
-    ; Debug LED: RA3=0, RA4=1
     BCF LATA,3,0
-    BSF LATA,4,0
+    CALL Espera_Rebots
     ; Decrement ciclic: si 0 -> 2, sino -1
     MOVF Menu_State,0,0
     BTFSC STATUS,Z,0
@@ -183,20 +204,20 @@ Menu_Left_Wrap
     MOVWF Menu_State,0
 Menu_Left_Fi
     CALL Actualitza_LED_Menu
+    CALL Dibuixa_Cara_Menu
     GOTO Bucle_Menu
 
 Comprova_Right
     ; Comprobar RB3 (RightOption)
     BTFSC PORTB,3,0
     GOTO Comprova_Select
+    BSF LATA,3,0
     CALL Espera_Rebots
 Deixa_Boto_Right
     BTFSS PORTB,3,0
     GOTO Deixa_Boto_Right
+    BCF LATA,3,0
     CALL Espera_Rebots
-    ; Debug LED: RA3=1, RA4=0
-    BSF LATA,3,0
-    BCF LATA,4,0
     ; Increment ciclic: si 2 -> 0, sino +1
     INCF Menu_State,1,0
     MOVLW D'3'
@@ -205,20 +226,20 @@ Deixa_Boto_Right
     CLRF Menu_State,0
 Menu_Right_Fi
     CALL Actualitza_LED_Menu
+    CALL Dibuixa_Cara_Menu
     GOTO Bucle_Menu
 
 Comprova_Select
     ; Comprobar RB2 (Select)
     BTFSC PORTB,2,0
     GOTO Bucle_Menu
+    BSF LATA,3,0
     CALL Espera_Rebots
 Deixa_Boto_Select
     BTFSS PORTB,2,0
     GOTO Deixa_Boto_Select
+    BCF LATA,3,0
     CALL Espera_Rebots
-    ; Debug LED: RA3=1, RA4=1
-    BSF LATA,3,0
-    BSF LATA,4,0
     ; Saltar al modo seleccionado
     MOVF Menu_State,0,0
     BTFSC STATUS,Z,0
@@ -241,6 +262,97 @@ Mode_Alimentar
 
 Mode_Reset
     GOTO Mode_Reset
+
+;-------------------------------------------------------------------------------
+;                       Dibujo de caras en matriz
+;-------------------------------------------------------------------------------
+
+; Selecciona la cara segun Menu_State y la dibuja en verde
+Dibuixa_Cara_Menu
+    ; Color verde (saludable): G=BRILLO, R=0, B=0
+    MOVLW BRILLO
+    MOVWF WS_Color_G,0
+    CLRF WS_Color_R,0
+    CLRF WS_Color_B,0
+
+    ; Seleccionar sprite segun Menu_State
+    MOVF Menu_State,0,0
+    BTFSC STATUS,Z,0
+    GOTO DCM_Child
+    MOVLW D'1'
+    CPFSEQ Menu_State,0
+    GOTO DCM_Adult
+    GOTO DCM_Teen
+
+DCM_Child
+    MOVLW LOW(FACE_CHILD)
+    MOVWF TBLPTRL,0
+    MOVLW HIGH(FACE_CHILD)
+    MOVWF TBLPTRH,0
+    CLRF TBLPTRU,0
+    GOTO Dibuixa_Cara
+
+DCM_Teen
+    MOVLW LOW(FACE_TEEN)
+    MOVWF TBLPTRL,0
+    MOVLW HIGH(FACE_TEEN)
+    MOVWF TBLPTRH,0
+    CLRF TBLPTRU,0
+    GOTO Dibuixa_Cara
+
+DCM_Adult
+    MOVLW LOW(FACE_ADULT)
+    MOVWF TBLPTRL,0
+    MOVLW HIGH(FACE_ADULT)
+    MOVWF TBLPTRH,0
+    CLRF TBLPTRU,0
+    GOTO Dibuixa_Cara
+
+; Dibuja un sprite 8x8 en la matriz WS2812B
+; Entrada: TBLPTR apunta a la tabla del sprite (8 bytes)
+;          WS_Color_G, WS_Color_R, WS_Color_B = color de los pixeles encendidos
+Dibuixa_Cara
+    BCF INTCON,GIE,0
+    MOVLW D'8'
+    MOVWF WS_Cont_Fila,0
+
+DC_Bucle_Fila
+    TBLRD*+
+    MOVFF TABLAT,WS_Fila
+    MOVLW D'8'
+    MOVWF WS_Cont_Bit_Pixel,0
+
+DC_Bucle_Bit
+    BTFSC WS_Fila,7,0
+    GOTO DC_Pixel_On
+    ; Pixel apagado: enviar negro (0,0,0)
+    MOVLW 0x00
+    CALL WS_Envia_Byte
+    MOVLW 0x00
+    CALL WS_Envia_Byte
+    MOVLW 0x00
+    CALL WS_Envia_Byte
+    GOTO DC_Siguiente_Bit
+
+DC_Pixel_On
+    ; Pixel encendido: enviar color (G,R,B)
+    MOVF WS_Color_G,0,0
+    CALL WS_Envia_Byte
+    MOVF WS_Color_R,0,0
+    CALL WS_Envia_Byte
+    MOVF WS_Color_B,0,0
+    CALL WS_Envia_Byte
+
+DC_Siguiente_Bit
+    RLNCF WS_Fila,1,0
+    DECFSZ WS_Cont_Bit_Pixel,1,0
+    BRA DC_Bucle_Bit
+    DECFSZ WS_Cont_Fila,1,0
+    BRA DC_Bucle_Fila
+
+    CALL WS_Reset
+    BSF INTCON,GIE,0
+RETURN
 
 ;-------------------------------------------------------------------------------
 ;                           Driver WS2812B
