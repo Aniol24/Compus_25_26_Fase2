@@ -330,19 +330,24 @@ Mode_Alimentar
 
 ; Reinicializar todo el estado
 Mode_Reset
+    BCF INTCON,GIE,0
+    BTFSC INTCON,GIE,0
+    BRA $-4
     CLRF Edat,0
     CLRF Hunger_Cnt,0
     CLRF Health_State,0
     CLRF Seg_Cnt,0
     CLRF Min_Seg_Cnt,0
     CLRF is_dead,0
+    CLRF update_display,0
     MOVLW D'5'
     MOVWF Food_Tokens,0
     MOVLW D'7'
     MOVWF Servo_Loops,0
-    BSF update_display,0,0
     CLRF Menu_State,0
     CALL Actualitza_LED_Menu
+    CALL Carrega_Timer0
+    CALL Dibuixa_Cara_Edat
     GOTO Bucle_Menu
 
 ;-------------------------------------------------------------------------------
@@ -475,8 +480,9 @@ RETURN
 ; Entrada: TBLPTR apunta a la tabla del sprite (8 bytes)
 ;          WS_Color_G, WS_Color_R, WS_Color_B = color de los pixeles encendidos
 Dibuixa_Cara
-    BCF LATC,1,0                    ; jitter patch: forzar servo LOW
     BCF INTCON,GIE,0
+    BTFSC INTCON,GIE,0
+    BRA $-4
     MOVLW D'8'
     MOVWF WS_Cont_Fila,0
 
