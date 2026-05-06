@@ -18,7 +18,7 @@ ORG 0x0000
 GOTO MAIN
 
 ORG 0x0008
-RETFIE FAST
+GOTO HIGH_RSI
 
 ORG 0x0018
 RETFIE FAST
@@ -52,6 +52,13 @@ WS_Color_B          EQU 0x00D       ; componente azul del color de la cara
 WS_Fila             EQU 0x00E       ; byte de la fila actual del sprite
 WS_Cont_Fila        EQU 0x00F       ; contador de filas (8)
 WS_Cont_Bit_Pixel   EQU 0x010       ; contador de bits dentro de una fila (8)
+
+; Sistema de edad (Timer0 ISR)
+Seg_Cnt             EQU 0x011       ; ticks de 20ms dentro de un segundo (0-49)
+Min_Seg_Cnt         EQU 0x012       ; segundos dentro de un minuto (0-59)
+Edat                EQU 0x013       ; edad (0-100, pasos de 10)
+update_display      EQU 0x01A       ; flag: ISR pone 1, main loop limpia
+is_dead             EQU 0x01B       ; flag de muerte (1=muerto)
 
 ; Constantes
 NUM_PIXELS          EQU D'64'       ; 8x8 = 64 LEDs
@@ -121,6 +128,30 @@ Init_Puertos
     BCF INTCON2,RBPU,0
 RETURN
 
+Init_Timer_State
+    CLRF Seg_Cnt,0
+    CLRF Min_Seg_Cnt,0
+    CLRF Edat,0
+    CLRF is_dead,0
+    CLRF update_display,0
+RETURN
+
+Carrega_Timer0
+    BCF INTCON,TMR0IF,0
+    MOVLW b'10000001'
+    MOVWF T0CON,0               ; Timer0 ON, 16-bit, internal, prescaler 1:4
+    MOVLW 0x63
+    MOVWF TMR0H,0
+    MOVLW 0xC0
+    MOVWF TMR0L,0
+RETURN
+
+Init_Interrupcions
+    MOVLW b'11100000'
+    MOVWF INTCON,0              ; GIE + PEIE + TMR0IE
+    BCF RCON,IPEN,0             ; sin niveles de prioridad
+RETURN
+
 ;-------------------------------------------------------------------------------
 ;                           LED RGB Menu
 ;-------------------------------------------------------------------------------
@@ -170,12 +201,11 @@ ALE_Blanc
     CALL Posa_LED_Blanc
 RETURN
 
-; Inicializar menu: estado 0 (Jugar), LED debug apagado, RGB cyan, cara child
+; Inicializar menu: estado 0 (Jugar), LED debug apagado, RGB cyan
 Init_Menu
     CLRF Menu_State,0
     BCF LATA,3,0
     CALL Actualitza_LED_Menu
-    CALL Dibuixa_Cara_Menu
 RETURN
 
 ;-------------------------------------------------------------------------------
@@ -183,6 +213,14 @@ RETURN
 ;-------------------------------------------------------------------------------
 
 Bucle_Menu
+    ; Comprobar muerte
+    BTFSC is_dead,0,0
+    GOTO Bucle_Muerte
+    ; Comprobar flag de actualizacion del display
+    BTFSS update_display,0,0
+    GOTO BM_Polling
+    CALL Actualitza_Display
+BM_Polling
     ; Comprobar RB1 (LeftOption)
     BTFSC PORTB,1,0
     GOTO Comprova_Right
@@ -204,7 +242,6 @@ Menu_Left_Wrap
     MOVWF Menu_State,0
 Menu_Left_Fi
     CALL Actualitza_LED_Menu
-    CALL Dibuixa_Cara_Menu
     GOTO Bucle_Menu
 
 Comprova_Right
@@ -226,7 +263,6 @@ Deixa_Boto_Right
     CLRF Menu_State,0
 Menu_Right_Fi
     CALL Actualitza_LED_Menu
-    CALL Dibuixa_Cara_Menu
     GOTO Bucle_Menu
 
 Comprova_Select
@@ -250,7 +286,7 @@ Deixa_Boto_Select
     GOTO Mode_Alimentar
 
 ;-------------------------------------------------------------------------------
-;                       Modos (placeholder)
+;                              Modos
 ;-------------------------------------------------------------------------------
 
 ; Bucles muertos - solo reset (PCI/MCLR) sale de aqui
@@ -260,59 +296,104 @@ Mode_Jugar
 Mode_Alimentar
     GOTO Mode_Alimentar
 
+; Reinicializar todo el estado (replica la secuencia de boot)
 Mode_Reset
-    GOTO Mode_Reset
+    BCF INTCON,GIE,0
+    BTFSC INTCON,GIE,0
+    BRA $-4
+    CLRF Edat,0
+    CLRF Seg_Cnt,0
+    CLRF Min_Seg_Cnt,0
+    CLRF is_dead,0
+    CLRF update_display,0
+    CLRF Menu_State,0
+    CALL Actualitza_LED_Menu
+    CALL Carrega_Timer0
+    CALL Dibuixa_Cara_Edat
+    GOTO Bucle_Menu
 
 ;-------------------------------------------------------------------------------
-;                       Dibujo de caras en matriz
+;                          Estado de muerte
 ;-------------------------------------------------------------------------------
 
-; Selecciona la cara segun Menu_State y la dibuja en verde
-Dibuixa_Cara_Menu
-    ; Color verde (saludable): G=BRILLO, R=0, B=0
+; Cara actual en rojo, bucle infinito (solo MCLR recupera)
+Bucle_Muerte
+    CLRF WS_Color_G,0
+    MOVLW BRILLO
+    MOVWF WS_Color_R,0
+    CLRF WS_Color_B,0
+    CALL Selecciona_Cara_Edat
+    CALL Dibuixa_Cara
+Muerte_Loop
+    GOTO Muerte_Loop
+
+;-------------------------------------------------------------------------------
+;                    Actualizacion del display (event-driven)
+;-------------------------------------------------------------------------------
+
+; Llamado desde main loop cuando update_display esta activo
+Actualitza_Display
+    CLRF update_display,0
+    BTFSC is_dead,0,0
+    GOTO Bucle_Muerte
+    CALL Dibuixa_Cara_Edat
+RETURN
+
+; Dibuja la cara segun edad en verde
+Dibuixa_Cara_Edat
     MOVLW BRILLO
     MOVWF WS_Color_G,0
     CLRF WS_Color_R,0
     CLRF WS_Color_B,0
+    CALL Selecciona_Cara_Edat
+    CALL Dibuixa_Cara
+RETURN
 
-    ; Seleccionar sprite segun Menu_State
-    MOVF Menu_State,0,0
-    BTFSC STATUS,Z,0
-    GOTO DCM_Child
-    MOVLW D'1'
-    CPFSEQ Menu_State,0
-    GOTO DCM_Adult
-    GOTO DCM_Teen
-
-DCM_Child
+; Configura TBLPTR segun Edat (0-29=Child, 30-59=Teen, 60+=Adult)
+Selecciona_Cara_Edat
+    MOVLW D'30'
+    CPFSLT Edat,0
+    GOTO SCE_No_Child
+    ; Child (Edat < 30)
     MOVLW LOW(FACE_CHILD)
     MOVWF TBLPTRL,0
     MOVLW HIGH(FACE_CHILD)
     MOVWF TBLPTRH,0
     CLRF TBLPTRU,0
-    GOTO Dibuixa_Cara
+RETURN
 
-DCM_Teen
+SCE_No_Child
+    MOVLW D'60'
+    CPFSLT Edat,0
+    GOTO SCE_Adult
+    ; Teen (30 <= Edat < 60)
     MOVLW LOW(FACE_TEEN)
     MOVWF TBLPTRL,0
     MOVLW HIGH(FACE_TEEN)
     MOVWF TBLPTRH,0
     CLRF TBLPTRU,0
-    GOTO Dibuixa_Cara
+RETURN
 
-DCM_Adult
+SCE_Adult
+    ; Adult (Edat >= 60)
     MOVLW LOW(FACE_ADULT)
     MOVWF TBLPTRL,0
     MOVLW HIGH(FACE_ADULT)
     MOVWF TBLPTRH,0
     CLRF TBLPTRU,0
-    GOTO Dibuixa_Cara
+RETURN
+
+;-------------------------------------------------------------------------------
+;                       Dibujo de caras en matriz
+;-------------------------------------------------------------------------------
 
 ; Dibuja un sprite 8x8 en la matriz WS2812B
 ; Entrada: TBLPTR apunta a la tabla del sprite (8 bytes)
 ;          WS_Color_G, WS_Color_R, WS_Color_B = color de los pixeles encendidos
 Dibuixa_Cara
     BCF INTCON,GIE,0
+    BTFSC INTCON,GIE,0
+    BRA $-4
     MOVLW D'8'
     MOVWF WS_Cont_Fila,0
 
@@ -448,7 +529,6 @@ WS_PV_Bucle
 RETURN
 
 ; Test 3: Fila 0 verde + pixel 8 rojo (verificar orden lineal)
-; Resultado confirmado: orden LINEAL (todas las filas izquierda a derecha)
 WS_Test_Orden
     BCF INTCON,GIE,0
 
@@ -534,13 +614,75 @@ Bucle_Rebots
 RETURN
 
 ;-------------------------------------------------------------------------------
+;                           ISR - Timer0 (cada 20ms)
+;-------------------------------------------------------------------------------
+
+HIGH_RSI
+    ; Si esta muerto, no contar tiempo
+    BTFSC is_dead,0,0
+    GOTO RSI_Fin
+
+    ; Contar tick de 20ms
+    INCF Seg_Cnt,1,0
+    MOVLW D'50'
+    CPFSEQ Seg_Cnt,0
+    GOTO RSI_Fin                    ; no ha pasado 1 segundo
+
+    ; --- Frontera de 1 segundo ---
+    CLRF Seg_Cnt,0
+
+    ; Contar segundos dentro del minuto
+    INCF Min_Seg_Cnt,1,0
+    MOVLW D'60'
+    CPFSEQ Min_Seg_Cnt,0
+    GOTO RSI_Fin                    ; no ha pasado 1 minuto
+
+    ; --- Frontera de 1 minuto ---
+    CLRF Min_Seg_Cnt,0
+    MOVLW D'10'
+    ADDWF Edat,1,0
+
+    ; Comprobar muerte por edad (>= 100)
+    MOVLW D'100'
+    CPFSLT Edat,0
+    GOTO RSI_Muerte_Edad
+
+    ; Solo redibujar si la cara cambia (umbrales 30 y 60)
+    MOVLW D'30'
+    CPFSEQ Edat,0
+    GOTO RSI_Check_60
+    BSF update_display,0,0
+    GOTO RSI_Fin
+
+RSI_Check_60
+    MOVLW D'60'
+    CPFSEQ Edat,0
+    GOTO RSI_Fin
+    BSF update_display,0,0
+    GOTO RSI_Fin
+
+RSI_Muerte_Edad
+    MOVLW D'100'
+    MOVWF Edat,0
+    BSF is_dead,0,0
+    BSF update_display,0,0
+
+RSI_Fin
+    CALL Carrega_Timer0
+RETFIE FAST
+
+;-------------------------------------------------------------------------------
 ;                              MAIN
 ;-------------------------------------------------------------------------------
 
 MAIN
     CALL Init_Oscilador
     CALL Init_Puertos
+    CALL Init_Timer_State
     CALL Init_Menu
+    CALL Dibuixa_Cara_Edat
+    CALL Carrega_Timer0
+    CALL Init_Interrupcions
     GOTO Bucle_Menu
 
 END
