@@ -53,10 +53,13 @@ WS_Fila             EQU 0x00E       ; byte de la fila actual del sprite
 WS_Cont_Fila        EQU 0x00F       ; contador de filas (8)
 WS_Cont_Bit_Pixel   EQU 0x010       ; contador de bits dentro de una fila (8)
 
-; Sistema de edad (Timer0 ISR)
+; Sistema de edad y salud (Timer0 ISR)
 Seg_Cnt             EQU 0x011       ; ticks de 20ms dentro de un segundo (0-49)
 Min_Seg_Cnt         EQU 0x012       ; segundos dentro de un minuto (0-59)
 Edat                EQU 0x013       ; edad (0-100, pasos de 10)
+Hunger_Cnt          EQU 0x014       ; contador de segundos de hambre (0-255)
+Health_State        EQU 0x015       ; 0=saludable, 1=advertencia
+Food_Tokens         EQU 0x016       ; tokens de comida (0-5)
 update_display      EQU 0x01A       ; flag: ISR pone 1, main loop limpia
 is_dead             EQU 0x01B       ; flag de muerte (1=muerto)
 
@@ -118,8 +121,12 @@ Init_Timer_State
     CLRF Seg_Cnt,0
     CLRF Min_Seg_Cnt,0
     CLRF Edat,0
+    CLRF Hunger_Cnt,0
+    CLRF Health_State,0
     CLRF is_dead,0
     CLRF update_display,0
+    MOVLW D'5'
+    MOVWF Food_Tokens,0
 RETURN
 
 Carrega_Timer0
@@ -275,12 +282,23 @@ Deixa_Boto_Select
 ;                              Modos
 ;-------------------------------------------------------------------------------
 
-; Bucles muertos - solo reset (PCI/MCLR) sale de aqui
+; Placeholder: otorga +1 token (max 5) y vuelve al menu
 Mode_Jugar
-    GOTO Mode_Jugar
+    MOVLW D'5'
+    CPFSEQ Food_Tokens,0
+    INCF Food_Tokens,1,0
+    GOTO Bucle_Menu
 
+; Consumir 1 token y reiniciar hambre
 Mode_Alimentar
-    GOTO Mode_Alimentar
+    MOVF Food_Tokens,0,0
+    BTFSC STATUS,Z,0
+    GOTO Bucle_Menu             ; sin tokens, volver al menu
+    DECF Food_Tokens,1,0
+    CLRF Hunger_Cnt,0
+    CLRF Health_State,0
+    BSF update_display,0,0
+    GOTO Bucle_Menu
 
 ; Reinicializar todo el estado (replica la secuencia de boot)
 Mode_Reset
@@ -288,10 +306,14 @@ Mode_Reset
     BTFSC INTCON,GIE,0
     BRA $-4
     CLRF Edat,0
+    CLRF Hunger_Cnt,0
+    CLRF Health_State,0
     CLRF Seg_Cnt,0
     CLRF Min_Seg_Cnt,0
     CLRF is_dead,0
     CLRF update_display,0
+    MOVLW D'5'
+    MOVWF Food_Tokens,0
     CLRF Menu_State,0
     CALL Actualitza_LED_Menu
     CALL Carrega_Timer0
@@ -325,12 +347,28 @@ Actualitza_Display
     CALL Dibuixa_Cara_Edat
 RETURN
 
-; Dibuja la cara segun edad en verde
+; Dibuja la cara segun edad con color segun salud
 Dibuixa_Cara_Edat
+    ; Determinar color segun Health_State
+    MOVF Health_State,0,0
+    BTFSC STATUS,Z,0
+    GOTO DCE_Verde
+    ; Amarillo: G=BRILLO, R=BRILLO, B=0
+    MOVLW BRILLO
+    MOVWF WS_Color_G,0
+    MOVLW BRILLO
+    MOVWF WS_Color_R,0
+    CLRF WS_Color_B,0
+    GOTO DCE_Dibuja
+
+DCE_Verde
+    ; Verde: G=BRILLO, R=0, B=0
     MOVLW BRILLO
     MOVWF WS_Color_G,0
     CLRF WS_Color_R,0
     CLRF WS_Color_B,0
+
+DCE_Dibuja
     CALL Selecciona_Cara_Edat
     CALL Dibuixa_Cara
 RETURN
@@ -616,7 +654,43 @@ HIGH_RSI
 
     ; --- Frontera de 1 segundo ---
     CLRF Seg_Cnt,0
+    INCF Hunger_Cnt,1,0
 
+    ; Comprobar muerte por hambre (>= 180s)
+    MOVLW D'180'
+    CPFSLT Hunger_Cnt,0
+    GOTO RSI_Muerte_Hambre
+
+    ; Comprobar advertencia (>= 90s)
+    MOVLW D'90'
+    CPFSLT Hunger_Cnt,0
+    GOTO RSI_Advertencia
+
+    ; Saludable (< 90s): comprobar si ha cambiado
+    MOVF Health_State,0,0
+    BTFSC STATUS,Z,0
+    GOTO RSI_Minuto                 ; ya era saludable, no cambiar
+    CLRF Health_State,0
+    BSF update_display,0,0
+    GOTO RSI_Minuto
+
+RSI_Muerte_Hambre
+    BSF is_dead,0,0
+    BSF update_display,0,0
+    GOTO RSI_Fin
+
+RSI_Advertencia
+    ; Comprobar si ya era advertencia
+    MOVLW D'1'
+    CPFSEQ Health_State,0
+    GOTO RSI_Adv_Cambio
+    GOTO RSI_Minuto                 ; ya era advertencia
+RSI_Adv_Cambio
+    MOVLW D'1'
+    MOVWF Health_State,0
+    BSF update_display,0,0
+
+RSI_Minuto
     ; Contar segundos dentro del minuto
     INCF Min_Seg_Cnt,1,0
     MOVLW D'60'
