@@ -65,20 +65,6 @@ NUM_PIXELS          EQU D'64'       ; 8x8 = 64 LEDs
 BRILLO              EQU 0x20        ; brillo reducido para tests
 
 ;-------------------------------------------------------------------------------
-;                        Tablas de sprites en flash
-;-------------------------------------------------------------------------------
-
-; Cada tabla tiene 8 bytes, un byte por fila (MSB = pixel izquierdo)
-FACE_CHILD
-    DB 0x00, 0x00, 0x18, 0x24, 0x24, 0x18, 0x00, 0x00
-
-FACE_TEEN
-    DB 0x00, 0x3C, 0x42, 0x5A, 0x42, 0x42, 0x3C, 0x00
-
-FACE_ADULT
-    DB 0x7E, 0x81, 0xA5, 0x81, 0xA5, 0x99, 0x81, 0x7E
-
-;-------------------------------------------------------------------------------
 ;                        Configuracion inicial
 ;-------------------------------------------------------------------------------
 
@@ -684,5 +670,19 @@ MAIN
     CALL Carrega_Timer0
     CALL Init_Interrupcions
     GOTO Bucle_Menu
+
+;-------------------------------------------------------------------------------
+;                        Tablas de sprites en flash
+;-------------------------------------------------------------------------------
+
+; Cada tabla tiene 8 bytes, un byte por fila (MSB = pixel izquierdo)
+FACE_CHILD
+    DB 0x00, 0x00, 0x18, 0x24, 0x24, 0x18, 0x00, 0x00
+
+FACE_TEEN
+    DB 0x00, 0x3C, 0x42, 0x5A, 0x42, 0x42, 0x3C, 0x00
+
+FACE_ADULT
+    DB 0x7E, 0x81, 0xA5, 0x81, 0xA5, 0x99, 0x81, 0x7E
 
 END
