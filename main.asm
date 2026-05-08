@@ -738,13 +738,8 @@ RETFIE FAST
 ;-------------------------------------------------------------------------------
 
 MAIN
-    ; Forzar RA4 como salida LOW antes de configurar oscilador
-    ; para que el WS2812B no capte ruido durante el arranque
-    BCF TRISA,4,0
-    BCF LATA,4,0
     CALL Init_Oscilador
     CALL Init_Puertos
-    CALL WS_Reset
     CALL Init_Timer_State
     CALL Init_Menu
     CALL Carrega_Timer0
