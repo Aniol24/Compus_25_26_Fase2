@@ -40,3 +40,32 @@ La diferencia clave entre MAIN (falla) y Mode_Reset (funciona):
 ### Estado
 
 En investigacion.
+
+---
+
+## 2. Servo SG90 provoca reset del PIC (Brown-out Reset)
+
+**Fecha:** 2026-05-08
+
+**Sintoma:** Al activar el PWM del servo SG90 en RC1, el PIC se reseteaba continuamente. La edad nunca incrementaba, el hambre tampoco avanzaba, y la pantalla parpadeaba (flash). El servo se movia ligeramente y volvia a 0.
+
+### Analisis
+
+El servo SG90 puede consumir hasta 700mA bajo carga. Si se alimenta desde el PICkit3 (que suministra corriente limitada por USB), el consumo del servo provoca una caida de tension en la linea de 5V. El PIC18F4321 tiene Brown-out Reset (BOR) activado por defecto, con umbral ~4.2V. Al caer la tension por debajo de ese umbral, el PIC se resetea.
+
+El ciclo observado era:
+1. PIC arranca, ISR genera pulso servo
+2. Servo se mueve, consume corriente
+3. Tension cae por debajo del umbral BOR
+4. PIC se resetea (vuelve a MAIN)
+5. Repetir — el PIC nunca llega a contar 1 segundo
+
+Esto explicaba todos los sintomas: edad estancada, hambre estancada, pantalla parpadeando (cada reset redibuja), servo que vuelve a 0 (cada reset reinicializa a 0 grados).
+
+### Solucion
+
+Alimentar el servo con una fuente externa de 5V independiente del PICkit3. Conectar la masa (GND) de la fuente externa con la masa del PIC para tener referencia comun.
+
+### Leccion aprendida
+
+Los actuadores (servos, motores, matrices LED grandes) nunca deben alimentarse desde el programador. Usar siempre fuente externa con masas conectadas.
