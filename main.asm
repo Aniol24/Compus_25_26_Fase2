@@ -747,6 +747,7 @@ MAIN
     CALL Carrega_Timer0
     CALL Init_Interrupcions
     BSF update_display,0,0
+    CALL Espera_Rebots
     GOTO Bucle_Menu
 
 ;-------------------------------------------------------------------------------
