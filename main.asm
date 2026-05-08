@@ -64,6 +64,7 @@ Servo_Delay_H       EQU 0x017       ; parte alta del contador de delay servo
 Servo_Delay_L       EQU 0x018       ; parte baja del contador de delay servo
 Servo_Cnt_H         EQU 0x019       ; copia de trabajo para el bucle de delay
 Servo_Cnt_L         EQU 0x01C       ; copia de trabajo para el bucle de delay
+Servo_Div_Tmp       EQU 0x01D       ; temporal para division en Actualitza_Servo
 update_display      EQU 0x01A       ; flag: ISR pone 1, main loop limpia
 is_dead             EQU 0x01B       ; flag de muerte (1=muerto)
 
@@ -361,7 +362,7 @@ Actualitza_Display
     BTFSC is_dead,0,0
     GOTO Bucle_Muerte
     CALL Actualitza_Servo
-    CALL Dibuixa_Cara_Edat
+    ; CALL Dibuixa_Cara_Edat       ; desactivado temporalmente para aislar servo
 RETURN
 
 ; Dibuja la cara segun edad con color segun salud
@@ -701,7 +702,7 @@ Actualitza_Servo
     MOVF Edat,0,0
     MOVWF WS_Temp,0             ; usar WS_Temp como temporal
     ; Dividir por 5: restar 5 repetidamente y contar
-    CLRF Servo_Cnt_L,0          ; usar como contador de divisiones
+    CLRF Servo_Div_Tmp,0        ; contador de divisiones (no usar Servo_Cnt_L, la ISR lo modifica)
 AS_Div_Loop
     MOVLW D'5'
     CPFSLT WS_Temp,0
@@ -710,13 +711,12 @@ AS_Div_Loop
 AS_Div_Sub
     MOVLW D'5'
     SUBWF WS_Temp,1,0
-    INCF Servo_Cnt_L,1,0
+    INCF Servo_Div_Tmp,1,0
     GOTO AS_Div_Loop
 AS_Div_Done
-    ; Servo_Cnt_L = Edat / 5 = offset en bytes dentro de SERVO_TABLE
-    ; Cargar TBLPTR con la direccion base de SERVO_TABLE + offset
+    ; Servo_Div_Tmp = Edat / 5 = offset en bytes dentro de SERVO_TABLE
     MOVLW LOW(SERVO_TABLE)
-    ADDWF Servo_Cnt_L,0,0
+    ADDWF Servo_Div_Tmp,0,0
     MOVWF TBLPTRL,0
     MOVLW HIGH(SERVO_TABLE)
     BTFSC STATUS,C,0
