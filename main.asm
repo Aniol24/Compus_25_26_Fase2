@@ -654,6 +654,48 @@ Bucle_Rebots
 RETURN
 
 ;-------------------------------------------------------------------------------
+;                           Servo PWM
+;-------------------------------------------------------------------------------
+
+; Calcula el delay del servo segun Edat y lo guarda en Servo_Delay_H/L
+; Edat va de 0 a 100 en pasos de 10 -> indice en tabla = Edat / 10
+; Cada entrada ocupa 2 bytes -> offset = (Edat / 10) * 2 = Edat / 5
+Actualitza_Servo
+    ; Calcular offset: Edat / 5 (como Edat es multiplo de 10, resultado es par)
+    MOVF Edat,0,0
+    MOVWF WS_Temp,0             ; usar WS_Temp como temporal
+    ; Dividir por 5: restar 5 repetidamente y contar
+    CLRF Servo_Cnt_L,0          ; usar como contador de divisiones
+AS_Div_Loop
+    MOVLW D'5'
+    CPFSLT WS_Temp,0
+    GOTO AS_Div_Sub
+    GOTO AS_Div_Done
+AS_Div_Sub
+    MOVLW D'5'
+    SUBWF WS_Temp,1,0
+    INCF Servo_Cnt_L,1,0
+    GOTO AS_Div_Loop
+AS_Div_Done
+    ; Servo_Cnt_L = Edat / 5 = offset en bytes dentro de SERVO_TABLE
+    ; Cargar TBLPTR con la direccion base de SERVO_TABLE + offset
+    MOVLW LOW(SERVO_TABLE)
+    ADDWF Servo_Cnt_L,0,0
+    MOVWF TBLPTRL,0
+    MOVLW HIGH(SERVO_TABLE)
+    BTFSC STATUS,C,0
+    ADDLW D'1'
+    MOVWF TBLPTRH,0
+    CLRF TBLPTRU,0
+    ; Leer low byte
+    TBLRD*+
+    MOVFF TABLAT,Servo_Delay_L
+    ; Leer high byte
+    TBLRD*+
+    MOVFF TABLAT,Servo_Delay_H
+RETURN
+
+;-------------------------------------------------------------------------------
 ;                           ISR - Timer0 (cada 20ms)
 ;-------------------------------------------------------------------------------
 
@@ -776,5 +818,21 @@ FACE_TEEN
 
 FACE_ADULT
     DB 0x7E, 0x81, 0xA5, 0x81, 0xA5, 0x99, 0x81, 0x7E
+
+; Tabla de delays para servo: 11 entradas (Edat 0,10,20,...,100)
+; Cada entrada: low byte, high byte del contador de iteraciones
+; Delay loop = 3 ciclos/iter, pulse = iterations * 3 * 125ns
+SERVO_TABLE
+    DB 0x35, 0x06     ; Edat=0:   H=0x06, L=0x35 (0.5ms)
+    DB 0x4A, 0x08     ; Edat=10:  H=0x08, L=0x4A (0.7ms)
+    DB 0x60, 0x0A     ; Edat=20:  H=0x0A, L=0x60 (0.9ms)
+    DB 0x75, 0x0C     ; Edat=30:  H=0x0C, L=0x75 (1.1ms)
+    DB 0x8A, 0x0E     ; Edat=40:  H=0x0E, L=0x8A (1.3ms)
+    DB 0xA0, 0x10     ; Edat=50:  H=0x10, L=0xA0 (1.5ms)
+    DB 0xB5, 0x12     ; Edat=60:  H=0x12, L=0xB5 (1.7ms)
+    DB 0xCA, 0x14     ; Edat=70:  H=0x14, L=0xCA (1.9ms)
+    DB 0xE0, 0x16     ; Edat=80:  H=0x16, L=0xE0 (2.1ms)
+    DB 0xF5, 0x18     ; Edat=90:  H=0x18, L=0xF5 (2.3ms)
+    DB 0x0A, 0x1B     ; Edat=100: H=0x1B, L=0x0A (2.5ms)
 
 END
