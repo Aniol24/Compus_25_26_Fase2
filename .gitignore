@@ -35,4 +35,6 @@ nbproject/Makefile-*
 disassembly/
 .generated_files/
 
+docs/
+
 # End of https://www.toptal.com/developers/gitignore/api/mplabx
