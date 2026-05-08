@@ -700,6 +700,24 @@ RETURN
 ;-------------------------------------------------------------------------------
 
 HIGH_RSI
+    ; --- Pulso servo (si esta vivo) ---
+    BTFSC is_dead,0,0
+    GOTO RSI_Skip_Servo
+    ; RC1 HIGH (inicio del pulso)
+    BSF LATC,1,0
+    ; Cargar copia de trabajo del delay
+    MOVFF Servo_Delay_H,Servo_Cnt_H
+    MOVFF Servo_Delay_L,Servo_Cnt_L
+    ; Bucle de delay: 3 ciclos por iteracion
+Servo_Delay_Loop
+    DECFSZ Servo_Cnt_L,1,0
+    GOTO Servo_Delay_Loop
+    DECFSZ Servo_Cnt_H,1,0
+    GOTO Servo_Delay_Loop
+    ; RC1 LOW (fin del pulso)
+    BCF LATC,1,0
+
+RSI_Skip_Servo
     ; Si esta muerto, no contar tiempo
     BTFSC is_dead,0,0
     GOTO RSI_Fin
