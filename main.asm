@@ -321,6 +321,7 @@ Desactiva_GIE_Reset
     BTFSC INTCON,GIE,0
     GOTO Desactiva_GIE_Reset
     CLRF Edat,0
+    CALL Actualitza_Servo
     CLRF Hunger_Cnt,0
     CLRF Health_State,0
     CLRF Seg_Cnt,0
@@ -777,6 +778,7 @@ RSI_Minuto
     CLRF Min_Seg_Cnt,0
     MOVLW D'10'
     ADDWF Edat,1,0
+    CALL Actualitza_Servo
 
     ; Comprobar muerte por edad (>= 100)
     MOVLW D'100'
