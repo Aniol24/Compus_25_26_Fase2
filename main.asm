@@ -742,9 +742,9 @@ MAIN
     CALL Init_Puertos
     CALL Init_Timer_State
     CALL Init_Menu
+    CALL Dibuixa_Cara_Edat
     CALL Carrega_Timer0
     CALL Init_Interrupcions
-    CALL Dibuixa_Cara_Edat
     GOTO Bucle_Menu
 
 ;-------------------------------------------------------------------------------
