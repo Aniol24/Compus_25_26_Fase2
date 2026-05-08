@@ -302,9 +302,10 @@ Mode_Alimentar
 
 ; Reinicializar todo el estado (replica la secuencia de boot)
 Mode_Reset
+Desactiva_GIE_Reset
     BCF INTCON,GIE,0
     BTFSC INTCON,GIE,0
-    BRA $-4
+    BRA Desactiva_GIE_Reset
     CLRF Edat,0
     CLRF Hunger_Cnt,0
     CLRF Health_State,0
@@ -317,7 +318,6 @@ Mode_Reset
     CLRF Menu_State,0
     CALL Actualitza_LED_Menu
     CALL Carrega_Timer0
-    CALL Dibuixa_Cara_Edat
     CALL Dibuixa_Cara_Edat
     GOTO Bucle_Menu
 
@@ -416,9 +416,10 @@ RETURN
 ; Entrada: TBLPTR apunta a la tabla del sprite (8 bytes)
 ;          WS_Color_G, WS_Color_R, WS_Color_B = color de los pixeles encendidos
 Dibuixa_Cara
+Desactiva_GIE_Cara
     BCF INTCON,GIE,0
     BTFSC INTCON,GIE,0
-    BRA $-4
+    BRA Desactiva_GIE_Cara
     MOVLW D'8'
     MOVWF WS_Cont_Fila,0
 
@@ -737,11 +738,15 @@ RETFIE FAST
 ;-------------------------------------------------------------------------------
 
 MAIN
+    ; Forzar RA4 como salida LOW antes de configurar oscilador
+    ; para que el WS2812B no capte ruido durante el arranque
+    BCF TRISA,4,0
+    BCF LATA,4,0
     CALL Init_Oscilador
     CALL Init_Puertos
+    CALL WS_Reset
     CALL Init_Timer_State
     CALL Init_Menu
-    CALL Dibuixa_Cara_Edat
     CALL Dibuixa_Cara_Edat
     CALL Carrega_Timer0
     CALL Init_Interrupcions
