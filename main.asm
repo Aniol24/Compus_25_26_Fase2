@@ -305,7 +305,7 @@ Mode_Reset
 Desactiva_GIE_Reset
     BCF INTCON,GIE,0
     BTFSC INTCON,GIE,0
-    BRA Desactiva_GIE_Reset
+    GOTO Desactiva_GIE_Reset
     CLRF Edat,0
     CLRF Hunger_Cnt,0
     CLRF Health_State,0
@@ -419,7 +419,7 @@ Dibuixa_Cara
 Desactiva_GIE_Cara
     BCF INTCON,GIE,0
     BTFSC INTCON,GIE,0
-    BRA Desactiva_GIE_Cara
+    GOTO Desactiva_GIE_Cara
     MOVLW D'8'
     MOVWF WS_Cont_Fila,0
 
@@ -453,9 +453,9 @@ DC_Pixel_On
 DC_Siguiente_Bit
     RLNCF WS_Fila,1,0
     DECFSZ WS_Cont_Bit_Pixel,1,0
-    BRA DC_Bucle_Bit
+    GOTO DC_Bucle_Bit
     DECFSZ WS_Cont_Fila,1,0
-    BRA DC_Bucle_Fila
+    GOTO DC_Bucle_Fila
 
     CALL WS_Reset
     BSF INTCON,GIE,0
@@ -486,7 +486,7 @@ WS_Bucle_Bit
     BCF LATA,4,0                    ; LOW siempre (T1H = 6 ciclos)
     RLNCF WS_Dato,1,0              ; rotar para siguiente bit
     DECFSZ WS_Cont_Bits,1,0
-    BRA WS_Bucle_Bit
+    GOTO WS_Bucle_Bit
 RETURN
 
 ; Senal de reset (>50us LOW en RA4)
@@ -497,7 +497,7 @@ WS_Reset
     MOVWF WS_Temp,0
 WS_Reset_Bucle
     DECFSZ WS_Temp,1,0
-    BRA WS_Reset_Bucle
+    GOTO WS_Reset_Bucle
 RETURN
 
 ;-------------------------------------------------------------------------------
@@ -518,7 +518,7 @@ WS_TR_Bucle
     MOVLW 0x00
     CALL WS_Envia_Byte              ; B = 0
     DECFSZ WS_Cont_Pixels,1,0
-    BRA WS_TR_Bucle
+    GOTO WS_TR_Bucle
 
     CALL WS_Reset
     BSF INTCON,GIE,0
@@ -548,7 +548,7 @@ WS_PV_Bucle
     MOVLW 0x00
     CALL WS_Envia_Byte
     DECFSZ WS_Cont_Pixels,1,0
-    BRA WS_PV_Bucle
+    GOTO WS_PV_Bucle
 
     CALL WS_Reset
     BSF INTCON,GIE,0
@@ -570,7 +570,7 @@ WS_TO_Verde
     MOVLW 0x00
     CALL WS_Envia_Byte              ; B
     DECFSZ WS_Cont_Pixels,1,0
-    BRA WS_TO_Verde
+    GOTO WS_TO_Verde
 
     ; Pixel 8: rojo (inicio fila 1)
     MOVLW 0x00
@@ -592,7 +592,7 @@ WS_TO_Apagado
     MOVLW 0x00
     CALL WS_Envia_Byte
     DECFSZ WS_Cont_Pixels,1,0
-    BRA WS_TO_Apagado
+    GOTO WS_TO_Apagado
 
     CALL WS_Reset
     BSF INTCON,GIE,0
@@ -615,11 +615,11 @@ Bucle_D2
     MOVWF Delay_Cnt1,0
 Bucle_D1
     DECFSZ Delay_Cnt1,1,0
-    BRA Bucle_D1
+    GOTO Bucle_D1
     DECFSZ Delay_Cnt2,1,0
-    BRA Bucle_D2
+    GOTO Bucle_D2
     DECFSZ Delay_Cnt3,1,0
-    BRA Bucle_D3
+    GOTO Bucle_D3
 RETURN
 
 ; Delay de ~16ms para debounce (rebotes)
