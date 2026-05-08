@@ -742,6 +742,7 @@ MAIN
     CALL Init_Puertos
     CALL Init_Timer_State
     CALL Init_Menu
+    CALL WS_Reset
     CALL Dibuixa_Cara_Edat
     CALL Carrega_Timer0
     CALL Init_Interrupcions
