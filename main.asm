@@ -744,7 +744,7 @@ MAIN
     CALL Init_Menu
     CALL Carrega_Timer0
     CALL Init_Interrupcions
-    BSF update_display,0,0
+    CALL Dibuixa_Cara_Edat
     GOTO Bucle_Menu
 
 ;-------------------------------------------------------------------------------
