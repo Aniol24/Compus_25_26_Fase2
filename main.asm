@@ -68,6 +68,10 @@ Servo_Div_Tmp       EQU 0x01D       ; temporal para division en Actualitza_Servo
 update_display      EQU 0x01A       ; flag: ISR pone 1, main loop limpia
 is_dead             EQU 0x01B       ; flag de muerte (1=muerto)
 
+; Jugar (joc Memory)
+Rand_Val            EQU 0x01E       ; numero aleatorio generado (0-9)
+Joc_Cnt             EQU 0x01F       ; contador de numeros en la partida
+
 ; Constantes
 NUM_PIXELS          EQU D'64'       ; 8x8 = 64 LEDs
 BRILLO              EQU 0x20        ; brillo reducido para tests
@@ -99,13 +103,13 @@ Init_Puertos
     MOVLW 0x07
     MOVWF CMCON,0
 
-    ; RA3, RA4, RA5 como salida
-    BCF TRISA,3,0
-    BCF TRISA,4,0
-    BCF TRISA,5,0
-    BCF LATA,3,0
-    BCF LATA,4,0
-    BCF LATA,5,0
+    ; RA0-RA5 como salida (RA0-RA3=RandomNumber BCD, RA4=WS2812B, RA5=LED R)
+    CLRF TRISA,0
+    CLRF LATA,0
+
+    ; PORTD como salida (RD0-RD6=7seg, RD7=RandomGenerated)
+    CLRF TRISD,0
+    CLRF LATD,0
 
     ; RE0, RE1 como salida (LED RGB verde y azul)
     BCF TRISE,0,0
@@ -297,11 +301,21 @@ Deixa_Boto_Select
 ;                              Modos
 ;-------------------------------------------------------------------------------
 
-; Placeholder: otorga +1 token (max 5) y vuelve al menu
+; Test: genera 4 numeros aleatorios y los muestra en el 7 segmentos
 Mode_Jugar
-    MOVLW D'5'
-    CPFSEQ Food_Tokens,0
-    INCF Food_Tokens,1,0
+    MOVLW D'4'
+    MOVWF Joc_Cnt,0
+MJ_Bucle
+    CALL Genera_Random
+    CALL Mostra_7Seg
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    DECFSZ Joc_Cnt,1,0
+    GOTO MJ_Bucle
+    CLRF LATD,0
     GOTO Bucle_Menu
 
 ; Consumir 1 token y reiniciar hambre
@@ -476,6 +490,39 @@ DC_Siguiente_Bit
 
     CALL WS_Reset
     BSF INTCON,GIE,0
+RETURN
+
+;-------------------------------------------------------------------------------
+;                      Generacion de numeros aleatorios
+;-------------------------------------------------------------------------------
+
+; Genera un numero aleatorio 0-9 a partir de TMR0L
+; Resultado en Rand_Val
+Genera_Random
+    MOVF TMR0L,0,0
+    ANDLW 0x0F
+    MOVWF Rand_Val,0
+    MOVLW D'10'
+    CPFSLT Rand_Val,0
+    SUBWF Rand_Val,1,0
+RETURN
+
+;-------------------------------------------------------------------------------
+;                         Display 7 segmentos
+;-------------------------------------------------------------------------------
+
+; Muestra Rand_Val (0-9) en el display 7 segmentos (PORTD)
+Mostra_7Seg
+    MOVLW LOW(TAULA_7SEG)
+    ADDWF Rand_Val,0,0
+    MOVWF TBLPTRL,0
+    MOVLW HIGH(TAULA_7SEG)
+    BTFSC STATUS,C,0
+    ADDLW D'1'
+    MOVWF TBLPTRH,0
+    CLRF TBLPTRU,0
+    TBLRD*
+    MOVFF TABLAT,LATD
 RETURN
 
 ;-------------------------------------------------------------------------------
@@ -862,6 +909,19 @@ FACE_TEEN
 
 FACE_ADULT
     DB 0x7E, 0x81, 0xA5, 0x81, 0xA5, 0x99, 0x81, 0x7E
+
+; Tabla 7 segmentos: catodo comun, segmentos gfedcba en bits 6..0
+TAULA_7SEG
+    DB 0x3F     ; 0
+    DB 0x06     ; 1
+    DB 0x5B     ; 2
+    DB 0x4F     ; 3
+    DB 0x66     ; 4
+    DB 0x6D     ; 5
+    DB 0x7D     ; 6
+    DB 0x07     ; 7
+    DB 0x7F     ; 8
+    DB 0x6F     ; 9
 
 ; Tabla de delays para servo: 11 entradas (Edat 0,10,20,...,100)
 ; Cada entrada: low byte, high byte del contador de iteraciones
