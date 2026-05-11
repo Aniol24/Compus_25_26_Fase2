@@ -919,17 +919,9 @@ FACE_ADULT
     DB 0x7E, 0x81, 0xA5, 0x81, 0xA5, 0x99, 0x81, 0x7E
 
 ; Tabla 7 segmentos: catodo comun, segmentos gfedcba en bits 6..0
+; Digitos: 0     1     2     3     4     5     6     7     8     9
 TAULA_7SEG
-    DB 0x3F     ; 0
-    DB 0x06     ; 1
-    DB 0x5B     ; 2
-    DB 0x4F     ; 3
-    DB 0x66     ; 4
-    DB 0x6D     ; 5
-    DB 0x7D     ; 6
-    DB 0x07     ; 7
-    DB 0x7F     ; 8
-    DB 0x6F     ; 9
+    DB 0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F
 
 ; Tabla de delays para servo: 11 entradas (Edat 0,10,20,...,100)
 ; Cada entrada: low byte, high byte del contador de iteraciones
