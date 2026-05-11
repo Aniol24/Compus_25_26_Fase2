@@ -103,14 +103,21 @@ Init_Puertos
     MOVLW 0x07
     MOVWF CMCON,0
 
-    ; RA0-RA5 como salida (RA0-RA3=RandomNumber BCD, RA4=WS2812B, RA5=LED R)
-    BCF TRISA,0,0
-    BCF TRISA,1,0
-    BCF TRISA,2,0
+    ; RA3, RA4, RA5 como salida
     BCF TRISA,3,0
     BCF TRISA,4,0
     BCF TRISA,5,0
-    CLRF LATA,0
+    BCF LATA,3,0
+    BCF LATA,4,0
+    BCF LATA,5,0
+
+    ; RA0-RA2 como salida (RandomNumber BCD bus)
+    BCF TRISA,0,0
+    BCF TRISA,1,0
+    BCF TRISA,2,0
+    BCF LATA,0,0
+    BCF LATA,1,0
+    BCF LATA,2,0
 
     ; PORTD como salida (RD0-RD6=7seg, RD7=RandomGenerated)
     CLRF TRISD,0
