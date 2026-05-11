@@ -368,6 +368,7 @@ Actualitza_Display
     CLRF update_display,0
     BTFSC is_dead,0,0
     GOTO Bucle_Muerte
+    CALL Actualitza_Servo
     CALL Dibuixa_Cara_Edat
 RETURN
 
@@ -622,6 +623,40 @@ WS_TO_Apagado
 RETURN
 
 ;-------------------------------------------------------------------------------
+;                          Tests Servo
+;-------------------------------------------------------------------------------
+
+; Test: Servo recorre 0, 50, 100 (0, 90, 180 grados) con pausas de 2s
+Servo_Test_Posicions
+    ; Posicion 0 grados (Edat=0)
+    CLRF Edat,0
+    CALL Actualitza_Servo
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    ; Posicion 90 grados (Edat=50)
+    MOVLW D'50'
+    MOVWF Edat,0
+    CALL Actualitza_Servo
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    ; Posicion 180 grados (Edat=100)
+    MOVLW D'100'
+    MOVWF Edat,0
+    CALL Actualitza_Servo
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    ; Volver a 0 grados
+    CLRF Edat,0
+    CALL Actualitza_Servo
+RETURN
+
+;-------------------------------------------------------------------------------
 ;                           Delays
 ;-------------------------------------------------------------------------------
 
@@ -784,17 +819,7 @@ RSI_Minuto
     CPFSLT Edat,0
     GOTO RSI_Muerte_Edad
 
-    ; Solo redibujar si la cara cambia (umbrales 30 y 60)
-    MOVLW D'30'
-    CPFSEQ Edat,0
-    GOTO RSI_Check_60
-    BSF update_display,0,0
-    GOTO RSI_Fin
-
-RSI_Check_60
-    MOVLW D'60'
-    CPFSEQ Edat,0
-    GOTO RSI_Fin
+    ; Actualizar display y servo en cada cambio de edad
     BSF update_display,0,0
     GOTO RSI_Fin
 
