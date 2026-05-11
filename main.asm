@@ -104,7 +104,12 @@ Init_Puertos
     MOVWF CMCON,0
 
     ; RA0-RA5 como salida (RA0-RA3=RandomNumber BCD, RA4=WS2812B, RA5=LED R)
-    CLRF TRISA,0
+    BCF TRISA,0,0
+    BCF TRISA,1,0
+    BCF TRISA,2,0
+    BCF TRISA,3,0
+    BCF TRISA,4,0
+    BCF TRISA,5,0
     CLRF LATA,0
 
     ; PORTD como salida (RD0-RD6=7seg, RD7=RandomGenerated)
