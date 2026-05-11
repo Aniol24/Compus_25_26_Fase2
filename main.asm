@@ -111,14 +111,6 @@ Init_Puertos
     BCF LATA,4,0
     BCF LATA,5,0
 
-    ; RA0-RA2 como salida (RandomNumber BCD bus)
-    BCF TRISA,0,0
-    BCF TRISA,1,0
-    BCF TRISA,2,0
-    BCF LATA,0,0
-    BCF LATA,1,0
-    BCF LATA,2,0
-
     ; PORTD como salida (RD0-RD6=7seg, RD7=RandomGenerated)
     CLRF TRISD,0
     CLRF LATD,0
