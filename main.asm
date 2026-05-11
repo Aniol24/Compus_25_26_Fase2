@@ -316,6 +316,10 @@ MJ_Bucle
     DECFSZ Joc_Cnt,1,0
     GOTO MJ_Bucle
     CLRF LATD,0
+    ; Otorgar +1 token (max 5) para poder testear Alimentar
+    MOVLW D'5'
+    CPFSEQ Food_Tokens,0
+    INCF Food_Tokens,1,0
     GOTO Bucle_Menu
 
 ; Consumir 1 token y reiniciar hambre
