@@ -60,6 +60,10 @@ Edat                EQU 0x013       ; edad (0-100, pasos de 10)
 Hunger_Cnt          EQU 0x014       ; contador de segundos de hambre (0-255)
 Health_State        EQU 0x015       ; 0=saludable, 1=advertencia
 Food_Tokens         EQU 0x016       ; tokens de comida (0-5)
+Servo_Delay_H       EQU 0x017       ; parte alta del contador de delay servo
+Servo_Delay_L       EQU 0x018       ; parte baja del contador de delay servo
+Servo_Cnt_H         EQU 0x019       ; copia de trabajo para el bucle de delay
+Servo_Cnt_L         EQU 0x01C       ; copia de trabajo para el bucle de delay
 update_display      EQU 0x01A       ; flag: ISR pone 1, main loop limpia
 is_dead             EQU 0x01B       ; flag de muerte (1=muerto)
 
@@ -115,6 +119,10 @@ Init_Puertos
 
     ; Activar pull-ups internas de PORTB
     BCF INTCON2,RBPU,0
+
+    ; RC1 como salida (servo PWM)
+    BCF TRISC,1,0
+    BCF LATC,1,0
 RETURN
 
 Init_Timer_State
@@ -127,6 +135,12 @@ Init_Timer_State
     CLRF update_display,0
     MOVLW D'5'
     MOVWF Food_Tokens,0
+
+    ; Servo a 0 grados (Edat=0 -> H=0x06, L=0x35)
+    MOVLW 0x06
+    MOVWF Servo_Delay_H,0
+    MOVLW 0x35
+    MOVWF Servo_Delay_L,0
 RETURN
 
 Carrega_Timer0
