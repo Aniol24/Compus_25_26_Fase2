@@ -333,10 +333,9 @@ MAIN
 
 ; Patron para RD0-RD6 por digito (0-9)
 ; RD7 se usa para el punto decimal (controlado por DP_State)
-; NOTA: estos valores son placeholder - ajustar segun el mapping real del display
-;   bit0=RD0, bit1=RD1, ..., bit6=RD6
-;   Asumiendo display catodo comun con: RD0=a, RD1=b, RD2=c, RD3=d, RD4=e, RD5=f, RD6=g
+; Mapping real: RD0=a, RD1=g, RD2=c, RD3=d, RD4=e, RD5=f, RD6=b
+; Display catodo comun (1=ON)
 TAULA_7SEG
-    DB 0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F
+    DB 0x7D, 0x44, 0x5B, 0x4F, 0x66, 0x2F, 0x3F, 0x45, 0x7F, 0x6F
 
 END

@@ -69,14 +69,16 @@ Mapping real descubierto:
 
 | Pin  | Segmento |
 |------|----------|
-| RD0  |          |
-| RD1  |          |
-| RD2  |          |
-| RD3  |          |
-| RD4  |          |
-| RD5  |          |
-| RD6  |          |
-| RD7  |          |
+| RD0  | a (top)  |
+| RD1  | g (middle) |
+| RD2  | c (lower-right) |
+| RD3  | d (bottom) |
+| RD4  | e (lower-left) |
+| RD5  | f (upper-left) |
+| RD6  | b (upper-right) |
+| RD7  | dp |
+
+**Nota:** El mapping es casi estándar, excepto que **b y g están intercambiados** (RD1=g en vez de b, RD6=b en vez de g).
 
 ## Información extra a anotar
 
