@@ -60,6 +60,10 @@ Edat                EQU 0x013       ; edad (0-100, pasos de 10)
 Hunger_Cnt          EQU 0x014       ; contador de segundos de hambre (0-255)
 Health_State        EQU 0x015       ; 0=saludable, 1=advertencia
 Food_Tokens         EQU 0x016       ; tokens de comida (0-5)
+Servo_Delay_H       EQU 0x017       ; parte alta del contador de delay servo
+Servo_Delay_L       EQU 0x018       ; parte baja del contador de delay servo
+Servo_Cnt_H         EQU 0x019       ; copia de trabajo para el bucle de delay
+Servo_Cnt_L         EQU 0x01C       ; copia de trabajo para el bucle de delay
 update_display      EQU 0x01A       ; flag: ISR pone 1, main loop limpia
 is_dead             EQU 0x01B       ; flag de muerte (1=muerto)
 
@@ -115,6 +119,10 @@ Init_Puertos
 
     ; Activar pull-ups internas de PORTB
     BCF INTCON2,RBPU,0
+
+    ; RC1 como salida (servo PWM)
+    BCF TRISC,1,0
+    BCF LATC,1,0
 RETURN
 
 Init_Timer_State
@@ -127,6 +135,12 @@ Init_Timer_State
     CLRF update_display,0
     MOVLW D'5'
     MOVWF Food_Tokens,0
+
+    ; Servo a 0 grados (Edat=0 -> H=0x06, L=0x35)
+    MOVLW 0x06
+    MOVWF Servo_Delay_H,0
+    MOVLW 0x35
+    MOVWF Servo_Delay_L,0
 RETURN
 
 Carrega_Timer0
@@ -307,6 +321,7 @@ Desactiva_GIE_Reset
     BTFSC INTCON,GIE,0
     GOTO Desactiva_GIE_Reset
     CLRF Edat,0
+    CALL Actualitza_Servo
     CLRF Hunger_Cnt,0
     CLRF Health_State,0
     CLRF Seg_Cnt,0
@@ -599,6 +614,40 @@ WS_TO_Apagado
 RETURN
 
 ;-------------------------------------------------------------------------------
+;                          Tests Servo
+;-------------------------------------------------------------------------------
+
+; Test: Servo recorre 0, 50, 100 (0, 90, 180 grados) con pausas de 2s
+Servo_Test_Posicions
+    ; Posicion 0 grados (Edat=0)
+    CLRF Edat,0
+    CALL Actualitza_Servo
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    ; Posicion 90 grados (Edat=50)
+    MOVLW D'50'
+    MOVWF Edat,0
+    CALL Actualitza_Servo
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    ; Posicion 180 grados (Edat=100)
+    MOVLW D'100'
+    MOVWF Edat,0
+    CALL Actualitza_Servo
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    ; Volver a 0 grados
+    CLRF Edat,0
+    CALL Actualitza_Servo
+RETURN
+
+;-------------------------------------------------------------------------------
 ;                           Delays
 ;-------------------------------------------------------------------------------
 
@@ -640,10 +689,70 @@ Bucle_Rebots
 RETURN
 
 ;-------------------------------------------------------------------------------
+;                           Servo PWM
+;-------------------------------------------------------------------------------
+
+; Calcula el delay del servo segun Edat y lo guarda en Servo_Delay_H/L
+; Edat va de 0 a 100 en pasos de 10 -> indice en tabla = Edat / 10
+; Cada entrada ocupa 2 bytes -> offset = (Edat / 10) * 2 = Edat / 5
+Actualitza_Servo
+    ; Calcular offset: Edat / 5 (como Edat es multiplo de 10, resultado es par)
+    MOVF Edat,0,0
+    MOVWF WS_Temp,0             ; usar WS_Temp como temporal
+    ; Dividir por 5: restar 5 repetidamente y contar
+    CLRF Servo_Cnt_L,0          ; usar como contador de divisiones
+AS_Div_Loop
+    MOVLW D'5'
+    CPFSLT WS_Temp,0
+    GOTO AS_Div_Sub
+    GOTO AS_Div_Done
+AS_Div_Sub
+    MOVLW D'5'
+    SUBWF WS_Temp,1,0
+    INCF Servo_Cnt_L,1,0
+    GOTO AS_Div_Loop
+AS_Div_Done
+    ; Servo_Cnt_L = Edat / 5 = indice en tabla (offset en bytes)
+    ; Cargar TBLPTR con la direccion base de SERVO_TABLE + offset
+    MOVLW LOW(SERVO_TABLE)
+    ADDWF Servo_Cnt_L,0,0
+    MOVWF TBLPTRL,0
+    MOVLW HIGH(SERVO_TABLE)
+    BTFSC STATUS,C,0
+    ADDLW D'1'
+    MOVWF TBLPTRH,0
+    CLRF TBLPTRU,0
+    ; Leer low byte
+    TBLRD*+
+    MOVFF TABLAT,Servo_Delay_L
+    ; Leer high byte
+    TBLRD*+
+    MOVFF TABLAT,Servo_Delay_H
+RETURN
+
+;-------------------------------------------------------------------------------
 ;                           ISR - Timer0 (cada 20ms)
 ;-------------------------------------------------------------------------------
 
 HIGH_RSI
+    ; --- Pulso servo (si esta vivo) ---
+    BTFSC is_dead,0,0
+    GOTO RSI_Skip_Servo
+    ; RC1 HIGH (inicio del pulso)
+    BSF LATC,1,0
+    ; Cargar copia de trabajo del delay
+    MOVFF Servo_Delay_H,Servo_Cnt_H
+    MOVFF Servo_Delay_L,Servo_Cnt_L
+    ; Bucle de delay: 3 ciclos por iteracion
+Servo_Delay_Loop
+    DECFSZ Servo_Cnt_L,1,0
+    GOTO Servo_Delay_Loop
+    DECFSZ Servo_Cnt_H,1,0
+    GOTO Servo_Delay_Loop
+    ; RC1 LOW (fin del pulso)
+    BCF LATC,1,0
+
+RSI_Skip_Servo
     ; Si esta muerto, no contar tiempo
     BTFSC is_dead,0,0
     GOTO RSI_Fin
@@ -703,6 +812,7 @@ RSI_Minuto
     CLRF Min_Seg_Cnt,0
     MOVLW D'10'
     ADDWF Edat,1,0
+    CALL Actualitza_Servo
 
     ; Comprobar muerte por edad (>= 100)
     MOVLW D'100'
@@ -762,5 +872,21 @@ FACE_TEEN
 
 FACE_ADULT
     DB 0x7E, 0x81, 0xA5, 0x81, 0xA5, 0x99, 0x81, 0x7E
+
+; Tabla de delays para servo: 11 entradas (Edat 0,10,20,...,100)
+; Cada entrada: low byte, high byte del contador de iteraciones
+; Delay loop = 3 ciclos/iter, pulse = iterations * 3 * 125ns
+SERVO_TABLE
+    DB 0x35, 0x06     ; Edat=0:   H=0x06, L=0x35 (0.5ms)
+    DB 0x4A, 0x08     ; Edat=10:  H=0x08, L=0x4A (0.7ms)
+    DB 0x60, 0x0A     ; Edat=20:  H=0x0A, L=0x60 (0.9ms)
+    DB 0x75, 0x0C     ; Edat=30:  H=0x0C, L=0x75 (1.1ms)
+    DB 0x8A, 0x0E     ; Edat=40:  H=0x0E, L=0x8A (1.3ms)
+    DB 0xA0, 0x10     ; Edat=50:  H=0x10, L=0xA0 (1.5ms)
+    DB 0xB5, 0x12     ; Edat=60:  H=0x12, L=0xB5 (1.7ms)
+    DB 0xCA, 0x14     ; Edat=70:  H=0x14, L=0xCA (1.9ms)
+    DB 0xE0, 0x16     ; Edat=80:  H=0x16, L=0xE0 (2.1ms)
+    DB 0xF5, 0x18     ; Edat=90:  H=0x18, L=0xF5 (2.3ms)
+    DB 0x0A, 0x1B     ; Edat=100: H=0x1B, L=0x0A (2.5ms)
 
 END
