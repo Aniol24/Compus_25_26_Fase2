@@ -67,6 +67,10 @@ Servo_Cnt_L         EQU 0x01C       ; copia de trabajo para el bucle de delay
 update_display      EQU 0x01A       ; flag: ISR pone 1, main loop limpia
 is_dead             EQU 0x01B       ; flag de muerte (1=muerto)
 
+; Modo Jugar (RNG + 7 segmentos)
+Rand_Val            EQU 0x01D       ; resultado del RNG (0-9)
+Joc_Cnt             EQU 0x01E       ; contador de iteraciones del juego
+
 ; Constantes
 NUM_PIXELS          EQU D'64'       ; 8x8 = 64 LEDs
 BRILLO              EQU 0x20        ; brillo reducido para tests
@@ -123,6 +127,10 @@ Init_Puertos
     ; RC1 como salida (servo PWM)
     BCF TRISC,1,0
     BCF LATC,1,0
+
+    ; RD0-RD7 como salida (7 segmentos + RandomGenerated)
+    CLRF TRISD,0
+    CLRF LATD,0
 RETURN
 
 Init_Timer_State
@@ -296,11 +304,27 @@ Deixa_Boto_Select
 ;                              Modos
 ;-------------------------------------------------------------------------------
 
-; Placeholder: otorga +1 token (max 5) y vuelve al menu
+; Modo Jugar: genera 4 numeros aleatorios y los muestra en el 7 segmentos
 Mode_Jugar
-    MOVLW D'5'
-    CPFSEQ Food_Tokens,0
-    INCF Food_Tokens,1,0
+    MOVLW D'4'
+    MOVWF Joc_Cnt,0
+MJ_Bucle
+    ; Comprobar muerte en cada iteracion
+    BTFSC is_dead,0,0
+    GOTO MJ_Fi
+    CALL Genera_Random
+    CALL Mostra_7Seg
+    ; Esperar 2.5s (5 x 500ms)
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    DECFSZ Joc_Cnt,1,0
+    GOTO MJ_Bucle
+MJ_Fi
+    ; Limpiar display y volver al menu
+    CLRF LATD,0
     GOTO Bucle_Menu
 
 ; Consumir 1 token y reiniciar hambre
@@ -689,6 +713,42 @@ Bucle_Rebots
 RETURN
 
 ;-------------------------------------------------------------------------------
+;                     Generador de numeros aleatorios
+;-------------------------------------------------------------------------------
+
+; Lee TMR0L y reduce a rango 0-9
+; Resultado en Rand_Val
+Genera_Random
+    MOVF TMR0L,0,0
+    ANDLW 0x0F
+    MOVWF Rand_Val,0
+    MOVLW D'10'
+    CPFSLT Rand_Val,0
+    SUBWF Rand_Val,1,0
+RETURN
+
+; Muestra el valor de Rand_Val en el display 7 segmentos
+; Lee TAULA_7SEG[Rand_Val] y escribe a LATD (bit 7 = 0)
+Mostra_7Seg
+    MOVLW LOW(TAULA_7SEG)
+    MOVWF TBLPTRL,0
+    MOVLW HIGH(TAULA_7SEG)
+    MOVWF TBLPTRH,0
+    CLRF TBLPTRU,0
+    ; Sumar offset = Rand_Val
+    MOVF Rand_Val,0,0
+    ADDWF TBLPTRL,1,0
+    BTFSC STATUS,C,0
+    INCF TBLPTRH,1,0
+    ; Leer byte de la tabla
+    TBLRD*
+    MOVF TABLAT,0,0
+    ; Escribir a LATD (forzar bit 7 a 0 — RD7 reservado)
+    ANDLW 0x7F
+    MOVWF LATD,0
+RETURN
+
+;-------------------------------------------------------------------------------
 ;                           Servo PWM
 ;-------------------------------------------------------------------------------
 
@@ -888,5 +948,11 @@ SERVO_TABLE
     DB 0xE0, 0x16     ; Edat=80:  H=0x16, L=0xE0 (2.1ms)
     DB 0xF5, 0x18     ; Edat=90:  H=0x18, L=0xF5 (2.3ms)
     DB 0x0A, 0x1B     ; Edat=100: H=0x1B, L=0x0A (2.5ms)
+
+; Tabla de patrones 7 segmentos (catodo comun, 1=ON)
+; Mapping: RD0=F, RD1=G, RD2=E, RD3=D, RD4=C, RD5=B, RD6=A
+; RD7 reservado para RandomGenerated (siempre 0 en esta tabla)
+TAULA_7SEG
+    DB 0x7D, 0x30, 0x6E, 0x7A, 0x33, 0x5B, 0x5F, 0x70, 0x7F, 0x7B
 
 END
