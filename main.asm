@@ -648,6 +648,21 @@ Bucle_Rebots
 RETURN
 
 ;-------------------------------------------------------------------------------
+;                     Generador de numeros aleatorios
+;-------------------------------------------------------------------------------
+
+; Lee TMR0L y reduce a rango 0-9
+; Resultado en Rand_Val
+Genera_Random
+    MOVF TMR0L,0,0
+    ANDLW 0x0F
+    MOVWF Rand_Val,0
+    MOVLW D'10'
+    CPFSLT Rand_Val,0
+    SUBWF Rand_Val,1,0
+RETURN
+
+;-------------------------------------------------------------------------------
 ;                           ISR - Timer0 (cada 20ms)
 ;-------------------------------------------------------------------------------
 
