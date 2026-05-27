@@ -314,11 +314,13 @@ MJ_Bucle
     GOTO MJ_Fi
     CALL Genera_Random
     CALL Mostra_7Seg
-    ; Esperar 2.5s (5 x 500ms)
+    ; Mostrar digito 2s (4 x 500ms)
     CALL Delay_500ms
     CALL Delay_500ms
     CALL Delay_500ms
     CALL Delay_500ms
+    ; Apagar display 500ms para indicar transicion
+    CLRF LATD,0
     CALL Delay_500ms
     DECFSZ Joc_Cnt,1,0
     GOTO MJ_Bucle
