@@ -290,11 +290,27 @@ Deixa_Boto_Select
 ;                              Modos
 ;-------------------------------------------------------------------------------
 
-; Placeholder: otorga +1 token (max 5) y vuelve al menu
+; Modo Jugar: genera 4 numeros aleatorios y los muestra en el 7 segmentos
 Mode_Jugar
-    MOVLW D'5'
-    CPFSEQ Food_Tokens,0
-    INCF Food_Tokens,1,0
+    MOVLW D'4'
+    MOVWF Joc_Cnt,0
+MJ_Bucle
+    ; Comprobar muerte en cada iteracion
+    BTFSC is_dead,0,0
+    GOTO MJ_Fi
+    CALL Genera_Random
+    CALL Mostra_7Seg
+    ; Esperar 2.5s (5 x 500ms)
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    DECFSZ Joc_Cnt,1,0
+    GOTO MJ_Bucle
+MJ_Fi
+    ; Limpiar display y volver al menu
+    CLRF LATD,0
     GOTO Bucle_Menu
 
 ; Consumir 1 token y reiniciar hambre
