@@ -70,6 +70,7 @@ is_dead             EQU 0x01B       ; flag de muerte (1=muerto)
 ; Modo Jugar (RNG + 7 segmentos)
 Rand_Val            EQU 0x01D       ; resultado del RNG (0-9)
 Joc_Cnt             EQU 0x01E       ; contador de iteraciones del juego
+LFSR_State          EQU 0x01F       ; estado del LFSR (generador pseudo-aleatorio)
 
 ; Constantes
 NUM_PIXELS          EQU D'64'       ; 8x8 = 64 LEDs
@@ -304,8 +305,15 @@ Deixa_Boto_Select
 ;                              Modos
 ;-------------------------------------------------------------------------------
 
-; Modo Jugar: genera 4 numeros aleatorios y los muestra en el 7 segmentos
+; Modo Jugar: genera 20 numeros aleatorios y los muestra en el 7 segmentos
 Mode_Jugar
+    ; Semilla del LFSR: TMR0L en el momento que el usuario pulsa Select
+    MOVF TMR0L,0,0
+    MOVWF LFSR_State,0
+    ; Evitar semilla 0 (LFSR se bloquea en 0)
+    MOVF LFSR_State,0,0
+    BTFSC STATUS,Z,0
+    INCF LFSR_State,1,0
     MOVLW D'20'
     MOVWF Joc_Cnt,0
 MJ_Bucle
@@ -717,10 +725,15 @@ RETURN
 ;                     Generador de numeros aleatorios
 ;-------------------------------------------------------------------------------
 
-; Lee TMR0L y reduce a rango 0-9
-; Resultado en Rand_Val
+; LFSR de 8 bits (taps en bits 7,5,4,3 -> polinomio maximal, periodo 255)
+; Avanza LFSR_State un paso y reduce a rango 0-9 en Rand_Val
 Genera_Random
-    MOVF TMR0L,0,0
+    ; Rotar LFSR un paso
+    RRNCF LFSR_State,0,0
+    BTFSC LFSR_State,0,0
+    XORLW 0xB8
+    MOVWF LFSR_State,0
+    ; Reducir a 0-9
     ANDLW 0x0F
     MOVWF Rand_Val,0
     MOVLW D'10'
