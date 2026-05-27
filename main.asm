@@ -306,7 +306,7 @@ Deixa_Boto_Select
 
 ; Modo Jugar: genera 4 numeros aleatorios y los muestra en el 7 segmentos
 Mode_Jugar
-    MOVLW D'4'
+    MOVLW D'20'
     MOVWF Joc_Cnt,0
 MJ_Bucle
     ; Comprobar muerte en cada iteracion
