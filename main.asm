@@ -771,4 +771,10 @@ FACE_TEEN
 FACE_ADULT
     DB 0x7E, 0x81, 0xA5, 0x81, 0xA5, 0x99, 0x81, 0x7E
 
+; Tabla de patrones 7 segmentos (catodo comun, 1=ON)
+; Mapping: RD0=F, RD1=G, RD2=E, RD3=D, RD4=C, RD5=B, RD6=A
+; RD7 reservado para RandomGenerated (siempre 0 en esta tabla)
+TAULA_7SEG
+    DB 0x7D, 0x30, 0x6E, 0x7A, 0x33, 0x5B, 0x5F, 0x70, 0x7F, 0x7B
+
 END
