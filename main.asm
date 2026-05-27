@@ -662,6 +662,27 @@ Genera_Random
     SUBWF Rand_Val,1,0
 RETURN
 
+; Muestra el valor de Rand_Val en el display 7 segmentos
+; Lee TAULA_7SEG[Rand_Val] y escribe a LATD (bit 7 = 0)
+Mostra_7Seg
+    MOVLW LOW(TAULA_7SEG)
+    MOVWF TBLPTRL,0
+    MOVLW HIGH(TAULA_7SEG)
+    MOVWF TBLPTRH,0
+    CLRF TBLPTRU,0
+    ; Sumar offset = Rand_Val
+    MOVF Rand_Val,0,0
+    ADDWF TBLPTRL,1,0
+    BTFSC STATUS,C,0
+    INCF TBLPTRH,1,0
+    ; Leer byte de la tabla
+    TBLRD*
+    MOVF TABLAT,0,0
+    ; Escribir a LATD (forzar bit 7 a 0 — RD7 reservado)
+    ANDLW 0x7F
+    MOVWF LATD,0
+RETURN
+
 ;-------------------------------------------------------------------------------
 ;                           ISR - Timer0 (cada 20ms)
 ;-------------------------------------------------------------------------------
