@@ -676,16 +676,15 @@ RETURN
 ;-------------------------------------------------------------------------------
 
 ; Delay de ~500ms a 32 MHz
-; 21 x 100 x 190 x 3 ciclos x 125ns ~= 500ms
+; 52 x 100 x 256 x 3 ciclos x 125ns ~= 499ms
 Delay_500ms
-    MOVLW D'21'
+    MOVLW D'52'
     MOVWF Delay_Cnt3,0
 Bucle_D3
     MOVLW D'100'
     MOVWF Delay_Cnt2,0
 Bucle_D2
-    MOVLW D'190'
-    MOVWF Delay_Cnt1,0
+    CLRF Delay_Cnt1,0
 Bucle_D1
     DECFSZ Delay_Cnt1,1,0
     GOTO Bucle_D1
