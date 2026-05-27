@@ -63,6 +63,10 @@ Food_Tokens         EQU 0x016       ; tokens de comida (0-5)
 update_display      EQU 0x01A       ; flag: ISR pone 1, main loop limpia
 is_dead             EQU 0x01B       ; flag de muerte (1=muerto)
 
+; Modo Jugar (RNG + 7 segmentos)
+Rand_Val            EQU 0x01C       ; resultado del RNG (0-9)
+Joc_Cnt             EQU 0x01D       ; contador de iteraciones del juego
+
 ; Constantes
 NUM_PIXELS          EQU D'64'       ; 8x8 = 64 LEDs
 BRILLO              EQU 0x20        ; brillo reducido para tests
@@ -115,6 +119,10 @@ Init_Puertos
 
     ; Activar pull-ups internas de PORTB
     BCF INTCON2,RBPU,0
+
+    ; RD0-RD7 como salida (7 segmentos + RandomGenerated)
+    CLRF TRISD,0
+    CLRF LATD,0
 RETURN
 
 Init_Timer_State
