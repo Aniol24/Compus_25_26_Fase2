@@ -69,7 +69,7 @@ is_dead             EQU 0x01B       ; flag de muerte (1=muerto)
 
 ; Modo Jugar (RNG + 7 segmentos)
 Rand_Val            EQU 0x01D       ; resultado del RNG (0-9)
-Joc_Cnt             EQU 0x01E       ; contador de iteraciones del juego
+; 0x01E libre (era Joc_Cnt, ya no se usa)
 LFSR_State          EQU 0x01F       ; estado del LFSR (generador pseudo-aleatorio)
 
 ; Constantes
@@ -103,13 +103,14 @@ Init_Puertos
     MOVLW 0x07
     MOVWF CMCON,0
 
-    ; RA3, RA4, RA5 como salida
+    ; RA0-RA5 como salida (RA0-RA3 = RandomNumber BCD, RA4 = WS2812B, RA5 = RGB rojo)
+    BCF TRISA,0,0
+    BCF TRISA,1,0
+    BCF TRISA,2,0
     BCF TRISA,3,0
     BCF TRISA,4,0
     BCF TRISA,5,0
-    BCF LATA,3,0
-    BCF LATA,4,0
-    BCF LATA,5,0
+    CLRF LATA,0
 
     ; RE0, RE1 como salida (LED RGB verde y azul)
     BCF TRISE,0,0
@@ -128,6 +129,12 @@ Init_Puertos
     ; RC1 como salida (servo PWM)
     BCF TRISC,1,0
     BCF LATC,1,0
+
+    ; RC2 como entrada (ResultsPulse de Fase 1)
+    BSF TRISC,2,0
+
+    ; INT0 flanco de subida para NewNumber (solo flag, no activar interrupcion)
+    BSF INTCON2,INTEDG0,0
 
     ; RD0-RD7 como salida (7 segmentos + RandomGenerated)
     CLRF TRISD,0
@@ -305,7 +312,7 @@ Deixa_Boto_Select
 ;                              Modos
 ;-------------------------------------------------------------------------------
 
-; Modo Jugar: genera 20 numeros aleatorios y los muestra en el 7 segmentos
+; Modo Jugar: protocolo de comunicacion con Fase 1 (Memory)
 Mode_Jugar
     ; Semilla del LFSR: TMR0L en el momento que el usuario pulsa Select
     MOVF TMR0L,0,0
@@ -314,27 +321,50 @@ Mode_Jugar
     MOVF LFSR_State,0,0
     BTFSC STATUS,Z,0
     INCF LFSR_State,1,0
-    MOVLW D'20'
-    MOVWF Joc_Cnt,0
-MJ_Bucle
-    ; Comprobar muerte en cada iteracion
-    BTFSC is_dead,0,0
-    GOTO MJ_Fi
+
+    ; Limpiar flag INT0 antes de empezar (evitar falsos positivos)
+    BCF INTCON,INT0IF,0
+
+    ; Generar y enviar primer numero a Fase 1
     CALL Genera_Random
-    CALL Mostra_7Seg
-    ; Mostrar digito 2s (4 x 500ms)
-    CALL Delay_500ms
-    CALL Delay_500ms
-    CALL Delay_500ms
-    CALL Delay_500ms
-    ; Apagar display 500ms para indicar transicion
+    CALL Envia_Numero_F1
+
+    ; Bucle de espera: polling de INT0IF (NewNumber) y RC2 (ResultsPulse)
+Joc_Espera
+    ; Comprobar muerte
+    BTFSC is_dead,0,0
+    GOTO Joc_Fi
+
+    ; Comprobar NewNumber via flag INT0IF (flanco de subida en RB0, latched por hardware)
+    BTFSS INTCON,INT0IF,0
+    GOTO Joc_Check_Result
+
+    ; NewNumber detectado: limpiar flag
+    BCF INTCON,INT0IF,0
+
+    ; Generar y enviar siguiente numero
+    CALL Genera_Random
+    CALL Envia_Numero_F1
+    GOTO Joc_Espera
+
+Joc_Check_Result
+    ; Comprobar ResultsPulse (RC2): normalmente HIGH, activo-LOW
+    BTFSC PORTC,2,0
+    GOTO Joc_Espera
+
+    ; ResultsPulse detectado: esperar fin del pulso (RC2 vuelve a HIGH)
+    ; (12B anadira medicion de duracion aqui)
+Joc_Espera_Result_Fi
+    BTFSS PORTC,2,0
+    GOTO Joc_Espera_Result_Fi
+
+Joc_Fi
+    ; Limpiar display 7 segmentos
     CLRF LATD,0
-    CALL Delay_500ms
-    DECFSZ Joc_Cnt,1,0
-    GOTO MJ_Bucle
-MJ_Fi
-    ; Limpiar display y volver al menu
-    CLRF LATD,0
+    ; Limpiar RA0-RA3 sin tocar RA4-RA5
+    MOVF LATA,0,0
+    ANDLW 0xF0
+    MOVWF LATA,0
     GOTO Bucle_Menu
 
 ; Consumir 1 token y reiniciar hambre
@@ -704,6 +734,21 @@ Bucle_D1
     GOTO Bucle_D3
 RETURN
 
+; Delay de ~1ms a 32 MHz
+; 11 x 243 x 3 ciclos x 125ns = 1.002ms
+Delay_1ms
+    MOVLW D'11'
+    MOVWF Delay_Cnt2,0
+D1ms_Bucle_Ext
+    MOVLW D'243'
+    MOVWF Delay_Cnt1,0
+D1ms_Bucle_Int
+    DECFSZ Delay_Cnt1,1,0
+    GOTO D1ms_Bucle_Int
+    DECFSZ Delay_Cnt2,1,0
+    GOTO D1ms_Bucle_Ext
+RETURN
+
 ; Delay de ~16ms para debounce (rebotes)
 Espera_Rebots
     MOVLW (.128)
@@ -760,6 +805,33 @@ Mostra_7Seg
     ; Escribir a LATD (forzar bit 7 a 0 — RD7 reservado)
     ANDLW 0x7F
     MOVWF LATD,0
+RETURN
+
+;-------------------------------------------------------------------------------
+;                     Comunicacion con Fase 1
+;-------------------------------------------------------------------------------
+
+; Envia el numero aleatorio actual a Fase 1:
+; 1. Escribe Rand_Val en RA0-RA3 (BCD), preservando RA4-RA5
+; 2. Muestra en 7 segmentos
+; 3. Pulso de 1ms en RD7 (RandomGenerated)
+Envia_Numero_F1
+    ; Escribir BCD en RA0-RA3 sin tocar RA4 (WS2812B) ni RA5 (RGB rojo)
+    MOVF LATA,0,0
+    ANDLW 0xF0
+    MOVWF WS_Temp,0
+    MOVF Rand_Val,0,0
+    ANDLW 0x0F
+    IORWF WS_Temp,0,0
+    MOVWF LATA,0
+
+    ; Mostrar en 7 segmentos
+    CALL Mostra_7Seg
+
+    ; Pulso RandomGenerated (RD7 HIGH durante 1ms)
+    BSF LATD,7,0
+    CALL Delay_1ms
+    BCF LATD,7,0
 RETURN
 
 ;-------------------------------------------------------------------------------
