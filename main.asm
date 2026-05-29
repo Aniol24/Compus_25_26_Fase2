@@ -352,11 +352,8 @@ Joc_Check_Result
     BTFSC PORTC,2,0
     GOTO Joc_Espera
 
-    ; ResultsPulse detectado: esperar fin del pulso (RC2 vuelve a HIGH)
-    ; (12B anadira medicion de duracion aqui)
-Joc_Espera_Result_Fi
-    BTFSS PORTC,2,0
-    GOTO Joc_Espera_Result_Fi
+    ; ResultsPulse detectado: medir duracion y evaluar resultado
+    CALL Mesura_ResultsPulse
 
 Joc_Fi
     ; Limpiar display 7 segmentos
@@ -833,6 +830,51 @@ Envia_Numero_F1
     CALL Delay_1ms
     BCF LATD,7,0
 RETURN
+
+; Mide la duracion del pulso ResultsPulse (RC2 LOW) y evalua el resultado:
+; - Pulso < 1.5ms (Delay_Cnt2 < 0x09) = derrota
+; - Pulso >= 1.5ms (Delay_Cnt2 >= 0x09) = victoria -> Food_Tokens += 1 (max 5)
+Mesura_ResultsPulse
+    ; Desactivar interrupciones para medicion precisa
+Desactiva_GIE_Mesura
+    BCF INTCON,GIE,0
+    BTFSC INTCON,GIE,0
+    GOTO Desactiva_GIE_Mesura
+
+    ; Inicializar contador 16 bits
+    CLRF Delay_Cnt1,0
+    CLRF Delay_Cnt2,0
+
+    ; Contar mientras RC2 esta LOW (5 ciclos/iteracion = 625ns)
+Mesura_Bucle
+    INCF Delay_Cnt1,1,0
+    BTFSC STATUS,Z,0
+    INCF Delay_Cnt2,1,0
+    BTFSS PORTC,2,0
+    GOTO Mesura_Bucle
+
+    ; Reactivar interrupciones
+    BSF INTCON,GIE,0
+
+    ; Comprobar muerte (pudo ocurrir mientras GIE estaba desactivado)
+    BTFSC is_dead,0,0
+    RETURN
+
+    ; Evaluar resultado: umbral en byte alto = 0x09 (~1.5ms)
+    MOVLW 0x09
+    CPFSLT Delay_Cnt2,0
+    GOTO Mesura_Victoria
+
+    ; Derrota: no hacer nada
+    RETURN
+
+Mesura_Victoria
+    ; Victoria: incrementar Food_Tokens si < 5
+    MOVLW D'5'
+    CPFSLT Food_Tokens,0
+    RETURN
+    INCF Food_Tokens,1,0
+    RETURN
 
 ;-------------------------------------------------------------------------------
 ;                           Servo PWM
