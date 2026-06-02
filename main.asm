@@ -69,7 +69,7 @@ is_dead             EQU 0x01B       ; flag de muerte (1=muerto)
 
 ; Modo Jugar (RNG + 7 segmentos)
 Rand_Val            EQU 0x01D       ; resultado del RNG (0-9)
-; 0x01E libre (era Joc_Cnt, ya no se usa)
+Joc_Num_Cnt         EQU 0x01E       ; comptador de números enviats (1-16)
 LFSR_State          EQU 0x01F       ; estado del LFSR (generador pseudo-aleatorio)
 
 ; Constantes
@@ -323,6 +323,7 @@ Mode_Jugar
     INCF LFSR_State,1,0
 
     ; Limpiar flag INT0 antes de empezar (evitar falsos positivos)
+    CLRF Joc_Num_Cnt,0  
     BCF INTCON,INT0IF,0
 
     ; Generar y enviar primer numero a Fase 1
@@ -334,19 +335,35 @@ Joc_Espera
     ; Comprobar muerte
     BTFSC is_dead,0,0
     GOTO Joc_Fi
-
+    
     ; Comprobar NewNumber via flag INT0IF (flanco de subida en RB0, latched por hardware)
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    CALL Delay_500ms
+    
     BTFSS INTCON,INT0IF,0
     GOTO Joc_Check_Result
 
+    MOVLW D'14'
+    CPFSLT Joc_Num_Cnt,0        ; si Joc_Num_Cnt < 15, salta (segueix)
+    GOTO Joc_Espera_Final       ; Joc_Num_Cnt >= 15 -> ignorar, esperar pols
+    
     ; NewNumber detectado: limpiar flag
     BCF INTCON,INT0IF,0
 
     ; Generar y enviar siguiente numero
     CALL Genera_Random
     CALL Envia_Numero_F1
+    INCF Joc_Num_Cnt,1,0
     GOTO Joc_Espera
 
+Joc_Espera_Final
+    CLRF LATD,0
+    BTFSC PORTC,2,0
+    GOTO Joc_Espera_Final
+    CALL Mesura_ResultsPulse
+    
 Joc_Check_Result
     ; Comprobar ResultsPulse (RC2): normalmente HIGH, activo-LOW
     BTFSC PORTC,2,0
@@ -827,6 +844,12 @@ Envia_Numero_F1
 
     ; Pulso RandomGenerated (RD7 HIGH durante 1ms)
     BSF LATD,7,0
+    CALL Delay_1ms
+    CALL Delay_1ms
+    CALL Delay_1ms
+    CALL Delay_1ms
+    CALL Delay_1ms
+    CALL Delay_1ms
     CALL Delay_1ms
     BCF LATD,7,0
 RETURN
