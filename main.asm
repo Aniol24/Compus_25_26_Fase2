@@ -69,7 +69,7 @@ is_dead             EQU 0x01B       ; flag de muerte (1=muerto)
 
 ; Modo Jugar (RNG + 7 segmentos)
 Rand_Val            EQU 0x01D       ; resultado del RNG (0-9)
-Joc_Num_Cnt         EQU 0x01E       ; comptador de n�meros enviats (1-16)
+Joc_Num_Cnt         EQU 0x01E       ; comptador de nï¿½meros enviats (1-16)
 LFSR_State          EQU 0x01F       ; estado del LFSR (generador pseudo-aleatorio)
 
 ; Constantes
@@ -129,6 +129,7 @@ Init_Puertos
     ; RC1 como salida (servo PWM)
     BCF TRISC,1,0
     BCF LATC,1,0
+    BSF TRISC,0,0
 
     ; RC2 como entrada (ResultsPulse de Fase 1)
     BSF TRISC,2,0
@@ -323,54 +324,54 @@ Mode_Jugar
     INCF LFSR_State,1,0
 
     ; Limpiar flag INT0 antes de empezar (evitar falsos positivos)
-    CLRF Joc_Num_Cnt,0  
+    CLRF Joc_Num_Cnt,0
     BCF INTCON,INT0IF,0
 
     ; Generar y enviar primer numero a Fase 1
     CALL Genera_Random
     CALL Envia_Numero_F1
 
-    ; Bucle de espera: polling de INT0IF (NewNumber) y RC2 (ResultsPulse)
+    ; Bucle de espera: polling de RC2 (ResultsPulse) e INT0IF (NewNumber)
 Joc_Espera
-    ; Comprobar muerte
     BTFSC is_dead,0,0
     GOTO Joc_Fi
-    
-    ; Comprobar NewNumber via flag INT0IF (flanco de subida en RB0, latched por hardware)
+    BTFSS PORTC,2,0          ; RC2 baix -> ResultsPulse
+    GOTO Joc_Pols
+    BTFSC PORTC,0,0          ; RC0 alt -> * premut
+    GOTO Joc_Espera_Final
+    BTFSS INTCON,INT0IF,0    ; NewNumber rebut?
+    GOTO Joc_Espera          ; no -> seguir esperant
+    ; NewNumber rebut: esperar que Fase 1 processi
     CALL Delay_500ms
     CALL Delay_500ms
     CALL Delay_500ms
     CALL Delay_500ms
-    
-    BTFSS INTCON,INT0IF,0
-    GOTO Joc_Check_Result
-
     MOVLW D'14'
-    CPFSLT Joc_Num_Cnt,0        ; si Joc_Num_Cnt < 15, salta (segueix)
-    GOTO Joc_Espera_Final       ; Joc_Num_Cnt >= 15 -> ignorar, esperar pols
-    
-    ; NewNumber detectado: limpiar flag
+    CPFSLT Joc_Num_Cnt,0
+    GOTO Joc_Espera_Final
     BCF INTCON,INT0IF,0
-
-    ; Generar y enviar siguiente numero
     CALL Genera_Random
     CALL Envia_Numero_F1
     INCF Joc_Num_Cnt,1,0
     GOTO Joc_Espera
 
+Joc_Pols
+    ; ResultsPulse detectado: RC2 ya esta LOW, medir duracion y evaluar
+    CALL Mesura_ResultsPulse
+    GOTO Joc_Fi
+
+    ; Todos los numeros enviados: limpiar display y esperar ResultsPulse en polling estrecho
 Joc_Espera_Final
     CLRF LATD,0
-    BTFSC PORTC,2,0
-    GOTO Joc_Espera_Final
-    CALL Mesura_ResultsPulse
-    
-Joc_Check_Result
-    ; Comprobar ResultsPulse (RC2): normalmente HIGH, activo-LOW
-    BTFSC PORTC,2,0
-    GOTO Joc_Espera
-
-    ; ResultsPulse detectado: medir duracion y evaluar resultado
-    CALL Mesura_ResultsPulse
+    MOVF LATA,0,0
+    ANDLW 0xF0
+    MOVWF LATA,0
+Joc_Final_Loop
+    BTFSC is_dead,0,0
+    GOTO Joc_Fi
+    BTFSS PORTC,2,0
+    GOTO Joc_Pols
+    GOTO Joc_Final_Loop
 
 Joc_Fi
     ; Limpiar display 7 segmentos
@@ -406,7 +407,7 @@ Desactiva_GIE_Reset
     CLRF Min_Seg_Cnt,0
     CLRF is_dead,0
     CLRF update_display,0
-    MOVLW D'5'
+    MOVLW D'0'
     MOVWF Food_Tokens,0
     CLRF Menu_State,0
     CALL Actualitza_LED_Menu
@@ -816,7 +817,7 @@ Mostra_7Seg
     ; Leer byte de la tabla
     TBLRD*
     MOVF TABLAT,0,0
-    ; Escribir a LATD (forzar bit 7 a 0 — RD7 reservado)
+    ; Escribir a LATD (forzar bit 7 a 0 â RD7 reservado)
     ANDLW 0x7F
     MOVWF LATD,0
 RETURN
